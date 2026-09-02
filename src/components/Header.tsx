@@ -4,7 +4,18 @@ export default function Header() {
             <div className="max-w-6xl mx-auto flex justify-between">
 
                 <div className="flex items-center gap-3 py-4">
+                    <img
+                        src="/LOGO-BIN.png"
+                        alt="Logo Kejaksaan RI"
+                        className="h-10 w-10 object-contain"
+                    />
+                    <img
+                        src="/logo.png"
+                        alt="Logo Kejaksaan RI"
+                        className="h-10 w-10 object-contain"
+                    />
                     <div className="h-8 w-px bg-gray-300" />
+
                     <div>
                         <h1 className="text-lg font-bold text-gray-900 leading-tight tracking-tight">
                             Kenaikan Gaji Berkala
@@ -24,9 +35,6 @@ export default function Header() {
                         </svg>
                         Tahun 2026
                     </div>
-
-                    <div className="h-8 w-px bg-gray-300" />
-
 
                 </div>
 

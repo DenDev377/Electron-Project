@@ -39,7 +39,7 @@ export default function Table() {
     return (
         <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-100 border-b border-gray-200">
                     <tr>
                         <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                             No
@@ -67,26 +67,26 @@ export default function Table() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                     {TotalData.map((item) => (
-                        <tr key={item.id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                                 {item.id}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                                 {item.Nama}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                                 {item.NIP}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                                 {item.Golongan}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                                 {item.TanggalMasuk}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                                 {item.TanggalKenaikan}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                                 <GeneratedButton />
                             </td>
                         </tr>
