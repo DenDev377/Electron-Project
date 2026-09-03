@@ -27,3 +27,4 @@ dist-ssr
 .env.example
 .env.test
 .env.test.local
+src/assets/database/SQLite.db
