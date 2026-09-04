@@ -20,6 +20,9 @@ const HEADER_MAP: Record<string, keyof PegawaiRow> = {
   'subgolongan': 'subgolongan',
   'sub golongan': 'subgolongan',
   'ruang': 'subgolongan',
+  'satker': 'satuan_kerja',
+  'satuan kerja': 'satuan_kerja',
+  'status pegawai': 'status_pegawai',
 };
 
 /**
@@ -144,7 +147,8 @@ export async function parseExcelFile(file: File): Promise<PegawaiRow[]> {
         row.nip !== '' ||
         row.nama !== '' ||
         row.golongan !== '' ||
-        row.subgolongan !== ''
+        row.subgolongan !== '' ||
+        row.satuan_kerja !== ''
     );
 
   return result;

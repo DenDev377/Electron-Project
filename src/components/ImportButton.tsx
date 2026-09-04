@@ -1,18 +1,25 @@
 import { useRef, useState } from 'react';
-import type { PegawaiRow } from '../types/pegawai';
+import type { PegawaiRow, ImportResult } from '../types/pegawai';
 import { parseExcelFile } from '../utils/excelParser';
+import { transformEmployeeData } from '../utils/employeeTransformer';
 
 interface ImportButtonProps {
+  /** Dipanggil setelah parsing selesai — untuk mengisi tabel di UI */
   onImport: (data: PegawaiRow[]) => void;
+  /** Dipanggil setelah proses import ke database selesai */
+  onImportResult?: (result: ImportResult) => void;
 }
 
-export default function ImportButton({ onImport }: ImportButtonProps) {
+type ImportStatus = 'idle' | 'parsing' | 'saving' | 'done' | 'error';
+
+export default function ImportButton({ onImport, onImportResult }: ImportButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<ImportStatus>('idle');
   const [error, setError] = useState<string | null>(null);
 
+  const isLoading = status === 'parsing' || status === 'saving';
+
   function handleClick() {
-    // Reset error, kemudian buka file picker native
     setError(null);
     inputRef.current?.click();
   }
@@ -25,32 +32,112 @@ export default function ImportButton({ onImport }: ImportButtonProps) {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (ext !== 'xlsx' && ext !== 'xls') {
       setError('File harus berformat .xlsx atau .xls');
-      // Reset input agar file yang sama bisa dipilih ulang
       e.target.value = '';
       return;
     }
 
-    setLoading(true);
     setError(null);
 
     try {
-      const data = await parseExcelFile(file);
-      console.log('[Import Excel] Hasil parsing:', data);
-      onImport(data);
+      // ── Tahap 1: Parsing Excel ────────────────────────────────────────
+      setStatus('parsing');
+      const rawRows = await parseExcelFile(file);
+      console.log('[Import] Hasil parsing Excel:', rawRows);
+
+      // Tampilkan data di tabel segera setelah parsing
+      onImport(rawRows);
+
+      // ── Tahap 2: Validasi & Transformasi data ─────────────────────────
+      const { valid, errors: transformErrors } = transformEmployeeData(rawRows);
+
+      console.log('[Import] Data valid:', valid.length);
+      if (transformErrors.length > 0) {
+        console.warn('[Import] Baris bermasalah:', transformErrors);
+      }
+
+      // ── Tahap 3: Simpan ke database via IPC ───────────────────────────
+      if (!window.electronAPI) {
+        // Berjalan di browser biasa (npm run dev) — tidak ada akses database
+        console.warn(
+          '[Import] window.electronAPI tidak tersedia. ' +
+          'Jalankan dengan `npm run electron:dev` untuk mengaktifkan penyimpanan database.'
+        );
+
+        // Buat hasil sementara dari transform errors saja
+        if (onImportResult) {
+          onImportResult({
+            berhasil:   0,
+            diperbarui: 0,
+            gagal:      transformErrors.length,
+            errors:     transformErrors,
+          });
+        }
+
+        setStatus('done');
+        setError(
+          'Mode browser: data ditampilkan di tabel, tapi tidak disimpan ke database. ' +
+          'Gunakan `npm run electron:dev` untuk menyimpan.'
+        );
+        e.target.value = '';
+        return;
+      }
+
+      if (valid.length === 0) {
+        // Semua baris gagal validasi — tidak perlu ke database
+        if (onImportResult) {
+          onImportResult({
+            berhasil:   0,
+            diperbarui: 0,
+            gagal:      transformErrors.length,
+            errors:     transformErrors,
+          });
+        }
+        setStatus('done');
+        e.target.value = '';
+        return;
+      }
+
+      // Kirim ke Electron main process
+      setStatus('saving');
+      const dbResult = await window.electronAPI.importPegawai(valid);
+      console.log('[Import] Hasil database:', dbResult);
+
+      // Gabungkan error dari transformasi + error dari database
+      const combinedResult: ImportResult = {
+        berhasil:   dbResult.berhasil,
+        diperbarui: dbResult.diperbarui,
+        gagal:      dbResult.gagal + transformErrors.length,
+        errors:     [...transformErrors, ...dbResult.errors],
+      };
+
+      if (onImportResult) {
+        onImportResult(combinedResult);
+      }
+
+      setStatus('done');
+
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Gagal membaca file Excel.';
-      console.error('[Import Excel] Error:', err);
+      const message = err instanceof Error ? err.message : 'Gagal memproses file.';
+      console.error('[Import] Error:', err);
       setError(message);
+      setStatus('error');
     } finally {
-      setLoading(false);
-      // Reset input supaya file yang sama bisa di-import ulang
       e.target.value = '';
     }
   }
 
+  // Label & warna tombol berdasarkan status
+  const buttonLabel = {
+    idle:    'Import Data',
+    parsing: 'Membaca Excel...',
+    saving:  'Menyimpan ke DB...',
+    done:    'Import Data',
+    error:   'Import Data',
+  }[status];
+
   return (
     <div className="flex flex-col items-end gap-1">
-      {/* Hidden file input — hanya accept xlsx dan xls */}
+      {/* Hidden file input */}
       <input
         ref={inputRef}
         type="file"
@@ -60,11 +147,12 @@ export default function ImportButton({ onImport }: ImportButtonProps) {
       />
 
       <button
+        id="import-data-button"
         onClick={handleClick}
-        disabled={loading}
+        disabled={isLoading}
         className="flex items-center gap-2 bg-[#635BFF] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#4f46e5] transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        {loading ? (
+        {isLoading ? (
           <>
             {/* Spinner */}
             <svg
@@ -73,21 +161,10 @@ export default function ImportButton({ onImport }: ImportButtonProps) {
               fill="none"
               viewBox="0 0 24 24"
             >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8H4z"
-              />
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
-            Memproses...
+            {buttonLabel}
           </>
         ) : (
           <>
@@ -105,14 +182,19 @@ export default function ImportButton({ onImport }: ImportButtonProps) {
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            Import Data
+            {buttonLabel}
           </>
         )}
       </button>
 
-      {/* Pesan error validasi */}
+      {/* Status indicator saat loading */}
+      {status === 'saving' && (
+        <p className="text-xs text-blue-500">Menyimpan ke database...</p>
+      )}
+
+      {/* Pesan error */}
       {error && (
-        <p className="text-xs text-red-500">{error}</p>
+        <p className="text-xs text-amber-600 max-w-xs text-right">{error}</p>
       )}
     </div>
   );

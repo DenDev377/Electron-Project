@@ -1,9 +1,9 @@
-import type { PegawaiRow } from '../types/pegawai';
+import type { PegawaiKGB, PegawaiRow } from '../types/pegawai';
 import GeneratedButton from './GeneratedButton';
 
 interface TableProps {
-  /** Data hasil parsing Excel. Kosong = tampil placeholder dummy. */
-  data: PegawaiRow[];
+  /** Data hasil query KGB dari SQLite. Kosong jika belum di-load atau mode browser. */
+  data: PegawaiKGB[] | PegawaiRow[];
 }
 
 export default function Table({ data }: TableProps) {
@@ -28,6 +28,9 @@ export default function Table({ data }: TableProps) {
               Sub Golongan
             </th>
             <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Gaji Pokok
+            </th>
+            <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
               Aksi
             </th>
           </tr>
@@ -36,7 +39,7 @@ export default function Table({ data }: TableProps) {
           {data.length === 0 ? (
             <tr>
               <td
-                colSpan={6}
+                colSpan={7}
                 className="px-6 py-10 text-center text-sm text-gray-400 italic"
               >
                 Belum ada data. Klik <span className="font-semibold text-[#635BFF]">Import Data</span> untuk memuat file Excel.
@@ -59,6 +62,11 @@ export default function Table({ data }: TableProps) {
                 </td>
                 <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                   {item.subgolongan}
+                </td>
+                <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
+                  {'gaji_pokok' in item && item.gaji_pokok != null 
+                    ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.gaji_pokok as number)
+                    : '-'}
                 </td>
                 <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
                   <GeneratedButton />

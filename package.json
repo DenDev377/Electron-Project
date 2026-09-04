@@ -3,25 +3,31 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "dist-electron/electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "electron:dev": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && npm run build:electron && electron .\""
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
     "autoprefixer": "^10.5.4",
     "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
     "electron": "^44.1.1",
     "oxlint": "^1.79.0",
     "postcss": "^8.5.26",
