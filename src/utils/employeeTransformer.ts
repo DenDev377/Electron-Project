@@ -91,6 +91,7 @@ export function transformEmployeeData(rows: PegawaiRow[]): TransformResult {
         tahun_pengangkatan,
         bulan_pengangkatan,
         total_masa_kerja,
+        pangkat_golongan: row.pangkat_golongan?.trim() || undefined,
         satuan_kerja:   row.satuan_kerja?.trim()   || undefined,
         status_pegawai: row.status_pegawai?.trim() || undefined,
       });

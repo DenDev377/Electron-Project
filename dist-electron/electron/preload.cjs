@@ -23,4 +23,8 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
      * Mengambil daftar pegawai yang layak KGB dari SQLite.
      */
     getPegawaiKGB: () => electron_1.ipcRenderer.invoke('db:getPegawaiKGB'),
+    /**
+     * Memicu pembuatan dokumen KGB untuk satu pegawai.
+     */
+    generateDokumenKGB: (id) => electron_1.ipcRenderer.invoke('doc:generateKGB', id),
 });

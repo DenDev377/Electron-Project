@@ -40,6 +40,7 @@ export function importEmployeesToDatabase(
       tahun_pengangkatan,
       bulan_pengangkatan,
       total_masa_kerja,
+      pangkat_golongan,
       satuan_kerja,
       status_pegawai
     ) VALUES (
@@ -50,6 +51,7 @@ export function importEmployeesToDatabase(
       @tahun_pengangkatan,
       @bulan_pengangkatan,
       @total_masa_kerja,
+      @pangkat_golongan,
       @satuan_kerja,
       @status_pegawai
     )
@@ -60,6 +62,7 @@ export function importEmployeesToDatabase(
       tahun_pengangkatan = excluded.tahun_pengangkatan,
       bulan_pengangkatan = excluded.bulan_pengangkatan,
       total_masa_kerja   = excluded.total_masa_kerja,
+      pangkat_golongan   = excluded.pangkat_golongan,
       satuan_kerja       = excluded.satuan_kerja,
       status_pegawai     = excluded.status_pegawai
   `);
@@ -82,6 +85,7 @@ export function importEmployeesToDatabase(
           tahun_pengangkatan: emp.tahun_pengangkatan,
           bulan_pengangkatan: emp.bulan_pengangkatan,
           total_masa_kerja:   emp.total_masa_kerja,
+          pangkat_golongan:   emp.pangkat_golongan ?? null,
           satuan_kerja:       emp.satuan_kerja   ?? null,
           status_pegawai:     emp.status_pegawai ?? null,
         });
@@ -137,6 +141,7 @@ export function getPegawaiKGB(db: Database): PegawaiKGB[] {
       p.tahun_pengangkatan,
       p.bulan_pengangkatan,
       p.total_masa_kerja,
+      p.pangkat_golongan,
       p.satuan_kerja,
       p.status_pegawai,
       tg.gaji_pokok

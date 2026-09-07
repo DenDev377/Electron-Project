@@ -28,3 +28,11 @@ dist-ssr
 .env.test
 .env.test.local
 src/assets/database/SQLite.db
+dist-electron/electron/db.cjs
+dist-electron/electron/main.cjs
+dist-electron/electron/preload.cjs
+electron/db.cts
+electron/main.cts
+electron/preload.cts
+output/*
+templates/*

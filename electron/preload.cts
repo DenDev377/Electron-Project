@@ -26,4 +26,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   getPegawaiKGB: (): Promise<PegawaiKGB[]> =>
     ipcRenderer.invoke('db:getPegawaiKGB'),
+
+  /**
+   * Memicu pembuatan dokumen KGB untuk satu pegawai.
+   */
+  generateDokumenKGB: (id: number) =>
+    ipcRenderer.invoke('doc:generateKGB', id),
+
 });

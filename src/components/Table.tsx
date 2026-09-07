@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { PegawaiKGB, PegawaiRow } from '../types/pegawai';
 import GeneratedButton from './GeneratedButton';
 
@@ -7,6 +8,33 @@ interface TableProps {
 }
 
 export default function Table({ data }: TableProps) {
+  const [processingId, setProcessingId] = useState<number | null>(null);
+
+  const handleGenerate = async (item: PegawaiKGB | PegawaiRow) => {
+    if (!('id' in item) || item.id === undefined) {
+      alert("Pegawai belum ada di database, silakan import terlebih dahulu.");
+      return;
+    }
+    
+    if (window.electronAPI) {
+      setProcessingId(item.id);
+      try {
+        const result = await window.electronAPI.generateDokumenKGB(item.id);
+        if (result.success) {
+          alert(`Dokumen berhasil dibuat di:\n${result.filePath}`);
+        } else {
+          alert(`Gagal: ${result.error}`);
+        }
+      } catch (err) {
+        alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setProcessingId(null);
+      }
+    } else {
+      alert("Fitur generate hanya bisa digunakan dalam aplikasi desktop.");
+    }
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -69,7 +97,10 @@ export default function Table({ data }: TableProps) {
                     : '-'}
                 </td>
                 <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-center">
-                  <GeneratedButton />
+                  <GeneratedButton 
+                    onClick={() => handleGenerate(item)} 
+                    isLoading={'id' in item && processingId === item.id} 
+                  />
                 </td>
               </tr>
             ))

@@ -16,6 +16,8 @@ const HEADER_MAP: Record<string, keyof PegawaiRow> = {
   'golongan': 'golongan',
   'gol/pangkat': 'golongan',
   'pangkat/gol': 'golongan',
+  'pangkat/golongan': 'golongan',
+  'pangkat golongan': 'golongan',
   // Subgolongan (jika memang ada kolom terpisah di Excel)
   'subgolongan': 'subgolongan',
   'sub golongan': 'subgolongan',
@@ -127,6 +129,7 @@ export async function parseExcelFile(file: File): Promise<PegawaiRow[]> {
         } else if (field === 'golongan') {
           // Ekstrak romawi DAN subgolongan dari satu kolom
           // contoh: "Jaksa Madya / (IV/a)" → golongan="IV", subgolongan="a"
+          entry.pangkat_golongan = strValue;
           const parsed = parseGolonganField(strValue);
           entry.golongan = parsed.golongan;
           // Hanya set subgolongan dari sini jika belum diisi oleh kolom terpisah

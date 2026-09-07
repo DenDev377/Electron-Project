@@ -7,6 +7,7 @@ export interface PegawaiRow {
   nama: string;
   golongan: string;
   subgolongan: string;
+  pangkat_golongan?: string;
   satuan_kerja: string;
   status_pegawai: string;
 }
@@ -23,6 +24,7 @@ export interface Employee {
   tahun_pengangkatan: number;
   bulan_pengangkatan: number;
   total_masa_kerja: number;
+  pangkat_golongan?: string;
   satuan_kerja?: string;
   status_pegawai?: string;
 }
@@ -61,6 +63,7 @@ export interface PegawaiKGB {
   tahun_pengangkatan: number;
   bulan_pengangkatan: number;
   total_masa_kerja: number;
+  pangkat_golongan: string | null;
   satuan_kerja: string | null;
   status_pegawai: string | null;
   gaji_pokok: number;
