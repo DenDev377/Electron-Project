@@ -182,6 +182,33 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
     }
     const gaji_lama = formatRupiah(rowGajiLama.gaji_pokok);
 
+    // Ambil KGB Berikutnya
+    const stmtKgbBerikutnya = db.prepare(`
+      SELECT mkg 
+      FROM tabel_gaji 
+      WHERE golongan = ? COLLATE NOCASE 
+        AND subgolongan = ? COLLATE NOCASE 
+        AND mkg > ? 
+        AND gaji_pokok > 0
+      ORDER BY mkg ASC
+      LIMIT 1
+    `);
+    const rowKgbBerikutnya = stmtKgbBerikutnya.get(golongan, subgolongan, total_masa_kerja) as { mkg: number } | undefined;
+
+    let textMkgBerikutnya = '';
+    let textTahunKgbBerikutnya = '';
+    
+    if (rowKgbBerikutnya) {
+      const selisihMkg = rowKgbBerikutnya.mkg - total_masa_kerja;
+      const calculatedYear = currentYear + selisihMkg;
+      
+      textMkgBerikutnya = rowKgbBerikutnya.mkg.toString();
+      textTahunKgbBerikutnya = formatTanggal(calculatedYear, bulan_pengangkatan);
+    } else {
+      textMkgBerikutnya = '-';
+      textTahunKgbBerikutnya = '-';
+    }
+
     // 2. Baca template Word
     const templatePath = path.resolve(process.cwd(), 'templates', 'kgb-template.docx');
     if (!fs.existsSync(templatePath)) {
@@ -211,7 +238,9 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       tanggal_berlaku: tanggalBerlaku,
       masa_kerja: masaKerja,
       gaji_lama,
-      gaji_baru
+      gaji_baru,
+      mkg_berikutnya: textMkgBerikutnya,
+      tahun_kgb_berikutnya: textTahunKgbBerikutnya
     });
     const buf = doc.getZip().generate({
       type: 'nodebuffer',
