@@ -90,7 +90,7 @@ export default function ImportResultCard({ result, onDismiss }: ImportResultCard
                 className="flex gap-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2"
               >
                 {/* Nomor baris */}
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-mono font-semibold text-red-700">
                     Baris {err.row}
                   </span>
@@ -102,7 +102,7 @@ export default function ImportResultCard({ result, onDismiss }: ImportResultCard
                       NIP: {err.nip}
                     </p>
                   )}
-                  <p className="text-xs text-red-700 break-words">{err.message}</p>
+                  <p className="text-xs text-red-700 wrap-break-words">{err.message}</p>
                 </div>
               </div>
             ))}

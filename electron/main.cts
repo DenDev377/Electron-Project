@@ -124,24 +124,9 @@ function formatTanggalSurat(tahunKgb: number, bulanKgb: number): string {
     tahunSurat -= 1;
   }
 
-  // Buat objek Date untuk tanggal 1 bulan surat
-  // Bulan dalam Date() adalah 0-indexed
-  const tgl1 = new Date(tahunSurat, bulanSurat - 1, 1);
-  const dayOfWeek = tgl1.getDay(); // 0=Minggu, 1=Senin, ..., 6=Sabtu
-
-  let tanggalSurat: number;
-  if (dayOfWeek === 0) {
-    // Minggu → geser ke Senin (tambah 1 hari)
-    tanggalSurat = 2;
-  } else if (dayOfWeek === 6) {
-    // Sabtu → geser ke Senin (tambah 2 hari)
-    tanggalSurat = 3;
-  } else {
-    // Senin–Jumat → tetap tanggal 1
-    tanggalSurat = 1;
-  }
-
-  const tglStr = tanggalSurat.toString().padStart(2, '0');
+  // Tanggal = tanggal hari ini saat dokumen di-generate
+  const hariIni = new Date().getDate();
+  const tglStr = hariIni.toString().padStart(2, '0');
   const bulanStr = NAMA_BULAN[bulanSurat - 1];
   return `Baturaja, ${tglStr} ${bulanStr} ${tahunSurat}`;
 }
