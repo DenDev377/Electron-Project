@@ -96,6 +96,42 @@ function formatRupiah(amount) {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
 }
 /**
+ * Helper: Hitung tanggal surat KGB.
+ * Aturan:
+ * - Bulan surat = bulan KGB berlaku - 3 bulan (dengan rollover tahun).
+ * - Tanggal surat = tgl 1 bulan tersebut, jika bukan hari kerja maka geser ke Senin berikutnya.
+ * - Format: "Baturaja, DD NamaBulan YYYY"
+ */
+function formatTanggalSurat(tahunKgb, bulanKgb) {
+    // Kurangi 3 bulan dari bulan berlaku KGB (bulanKgb dalam format 1-12)
+    let bulanSurat = bulanKgb - 3;
+    let tahunSurat = tahunKgb;
+    if (bulanSurat <= 0) {
+        bulanSurat += 12;
+        tahunSurat -= 1;
+    }
+    // Buat objek Date untuk tanggal 1 bulan surat
+    // Bulan dalam Date() adalah 0-indexed
+    const tgl1 = new Date(tahunSurat, bulanSurat - 1, 1);
+    const dayOfWeek = tgl1.getDay(); // 0=Minggu, 1=Senin, ..., 6=Sabtu
+    let tanggalSurat;
+    if (dayOfWeek === 0) {
+        // Minggu → geser ke Senin (tambah 1 hari)
+        tanggalSurat = 2;
+    }
+    else if (dayOfWeek === 6) {
+        // Sabtu → geser ke Senin (tambah 2 hari)
+        tanggalSurat = 3;
+    }
+    else {
+        // Senin–Jumat → tetap tanggal 1
+        tanggalSurat = 1;
+    }
+    const tglStr = tanggalSurat.toString().padStart(2, '0');
+    const bulanStr = NAMA_BULAN[bulanSurat - 1];
+    return `Baturaja, ${tglStr} ${bulanStr} ${tahunSurat}`;
+}
+/**
  * Channel: 'doc:generateKGB'
  * Generate file Word menggunakan Docxtemplater
  */
@@ -175,6 +211,8 @@ electron_1.ipcMain.handle('doc:generateKGB', async (_, id) => {
             textMkgBerikutnya = '-';
             textTahunKgbBerikutnya = '-';
         }
+        // Hitung tanggal surat: bulan berlaku KGB (bulan_pengangkatan) dikurangi 3 bulan, hari kerja terdekat
+        const tanggalSurat = formatTanggalSurat(currentYear, bulan_pengangkatan);
         // 2. Baca template Word
         const templatePath = path_1.default.resolve(process.cwd(), 'templates', 'kgb-template.docx');
         if (!fs_1.default.existsSync(templatePath)) {
@@ -203,7 +241,8 @@ electron_1.ipcMain.handle('doc:generateKGB', async (_, id) => {
             gaji_lama,
             gaji_baru,
             mkg_berikutnya: textMkgBerikutnya,
-            tahun_kgb_berikutnya: textTahunKgbBerikutnya
+            tahun_kgb_berikutnya: textTahunKgbBerikutnya,
+            tanggal_surat: tanggalSurat
         });
         const buf = doc.getZip().generate({
             type: 'nodebuffer',
@@ -248,7 +287,7 @@ function createWindow() {
         // Mode dev: load dari Vite dev server
         win.loadURL('http://localhost:5173');
         // Buka DevTools otomatis saat development
-        win.webContents.openDevTools();
+        //win.webContents.openDevTools();
     }
     else {
         // Mode production: load dari file yang sudah di-build

@@ -91,12 +91,12 @@ function formatTanggal(tahun: number, bulan: number): string {
 function hitungMasaKerja(thnAwal: number, blnAwal: number, thnAkhir: number, blnAkhir: number): string {
   let diffYears = thnAkhir - thnAwal;
   let diffMonths = blnAkhir - blnAwal;
-  
+
   if (diffMonths < 0) {
     diffYears -= 1;
     diffMonths += 12;
   }
-  
+
   // Mencegah tahun negatif bila aneh (fallback)
   const finalYears = Math.max(0, diffYears);
   return `${finalYears} tahun ${diffMonths} bulan`;
@@ -108,6 +108,45 @@ function formatRupiah(amount: number): string {
 }
 
 /**
+ * Helper: Hitung tanggal surat KGB.
+ * Aturan:
+ * - Bulan surat = bulan KGB berlaku - 3 bulan (dengan rollover tahun).
+ * - Tanggal surat = tgl 1 bulan tersebut, jika bukan hari kerja maka geser ke Senin berikutnya.
+ * - Format: "Baturaja, DD NamaBulan YYYY"
+ */
+function formatTanggalSurat(tahunKgb: number, bulanKgb: number): string {
+  // Kurangi 3 bulan dari bulan berlaku KGB (bulanKgb dalam format 1-12)
+  let bulanSurat = bulanKgb - 3;
+  let tahunSurat = tahunKgb;
+
+  if (bulanSurat <= 0) {
+    bulanSurat += 12;
+    tahunSurat -= 1;
+  }
+
+  // Buat objek Date untuk tanggal 1 bulan surat
+  // Bulan dalam Date() adalah 0-indexed
+  const tgl1 = new Date(tahunSurat, bulanSurat - 1, 1);
+  const dayOfWeek = tgl1.getDay(); // 0=Minggu, 1=Senin, ..., 6=Sabtu
+
+  let tanggalSurat: number;
+  if (dayOfWeek === 0) {
+    // Minggu → geser ke Senin (tambah 1 hari)
+    tanggalSurat = 2;
+  } else if (dayOfWeek === 6) {
+    // Sabtu → geser ke Senin (tambah 2 hari)
+    tanggalSurat = 3;
+  } else {
+    // Senin–Jumat → tetap tanggal 1
+    tanggalSurat = 1;
+  }
+
+  const tglStr = tanggalSurat.toString().padStart(2, '0');
+  const bulanStr = NAMA_BULAN[bulanSurat - 1];
+  return `Baturaja, ${tglStr} ${bulanStr} ${tahunSurat}`;
+}
+
+/**
  * Channel: 'doc:generateKGB'
  * Generate file Word menggunakan Docxtemplater
  */
@@ -116,9 +155,9 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
   try {
     // 1. Ambil data pegawai berdasarkan id
     const stmt = db.prepare('SELECT nama, nip, satuan_kerja, tahun_pengangkatan, bulan_pengangkatan, golongan, subgolongan, pangkat_golongan, total_masa_kerja FROM pegawai WHERE id = ?');
-    const row = stmt.get(id) as { 
-      nama: string; 
-      nip: string; 
+    const row = stmt.get(id) as {
+      nama: string;
+      nip: string;
       satuan_kerja: string | null;
       tahun_pengangkatan: number;
       bulan_pengangkatan: number;
@@ -127,7 +166,7 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       pangkat_golongan: string | null;
       total_masa_kerja: number;
     } | undefined;
-    
+
     if (!row) {
       return { success: false, error: `Pegawai dengan ID ${id} tidak ditemukan.` };
     }
@@ -144,9 +183,9 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
 
     // Bentuk data tanggal & masa kerja
     const tanggalPengangkatan = formatTanggal(currentYear, bulan_pengangkatan);
-    
+
     const tanggalBerlaku = formatTanggal(currentYear, currentMonth);
-    
+
     const masaKerja = hitungMasaKerja(tahun_pengangkatan, bulan_pengangkatan, currentYear, currentMonth);
 
     // Ambil gaji baru
@@ -197,17 +236,20 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
 
     let textMkgBerikutnya = '';
     let textTahunKgbBerikutnya = '';
-    
+
     if (rowKgbBerikutnya) {
       const selisihMkg = rowKgbBerikutnya.mkg - total_masa_kerja;
       const calculatedYear = currentYear + selisihMkg;
-      
+
       textMkgBerikutnya = rowKgbBerikutnya.mkg.toString();
       textTahunKgbBerikutnya = formatTanggal(calculatedYear, bulan_pengangkatan);
     } else {
       textMkgBerikutnya = '-';
       textTahunKgbBerikutnya = '-';
     }
+
+    // Hitung tanggal surat: bulan berlaku KGB (bulan_pengangkatan) dikurangi 3 bulan, hari kerja terdekat
+    const tanggalSurat = formatTanggalSurat(currentYear, bulan_pengangkatan);
 
     // 2. Baca template Word
     const templatePath = path.resolve(process.cwd(), 'templates', 'kgb-template.docx');
@@ -228,9 +270,9 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
     const textPangkatGolongan = pangkat_golongan || textDalamGolongan; // Fallback jika kosong
 
     // 4. Set data & render
-    doc.render({ 
-      nama, 
-      nip, 
+    doc.render({
+      nama,
+      nip,
       pangkat_golongan: textPangkatGolongan,
       dalam_golongan: textDalamGolongan,
       satuan_kerja: satuan_kerja || '-',
@@ -240,7 +282,8 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       gaji_lama,
       gaji_baru,
       mkg_berikutnya: textMkgBerikutnya,
-      tahun_kgb_berikutnya: textTahunKgbBerikutnya
+      tahun_kgb_berikutnya: textTahunKgbBerikutnya,
+      tanggal_surat: tanggalSurat
     });
     const buf = doc.getZip().generate({
       type: 'nodebuffer',
@@ -252,7 +295,7 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
-    
+
     // Sanitasi nama untuk nama file yang valid
     const safeName = nama.replace(/[^a-zA-Z0-9 \-_]/g, '_').trim();
     const outPath = path.join(outputDir, `test-${safeName}.docx`);
@@ -290,7 +333,7 @@ function createWindow(): void {
     // Mode dev: load dari Vite dev server
     win.loadURL('http://localhost:5173');
     // Buka DevTools otomatis saat development
-    win.webContents.openDevTools();
+    //win.webContents.openDevTools();
   } else {
     // Mode production: load dari file yang sudah di-build
     win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));
