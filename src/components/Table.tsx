@@ -21,7 +21,7 @@ export default function Table({ data }: TableProps) {
       try {
         const result = await window.electronAPI.generateDokumenKGB(item.id);
         if (result.success) {
-          alert(`Dokumen berhasil dibuat di:\n${result.filePath}`);
+          // Sukses generate, biarkan user bisa generate ulang jika perlu
         } else {
           alert(`Gagal: ${result.error}`);
         }
@@ -100,6 +100,7 @@ export default function Table({ data }: TableProps) {
                   <GeneratedButton 
                     onClick={() => handleGenerate(item)} 
                     isLoading={'id' in item && processingId === item.id} 
+                    bulanPengangkatan={'bulan_pengangkatan' in item ? item.bulan_pengangkatan : undefined}
                   />
                 </td>
               </tr>
