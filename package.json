@@ -10,7 +10,41 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "build:exe": "npm run build && npm run build:electron && electron-builder",
     "electron:dev": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && npm run build:electron && electron .\""
+  },
+  "build": {
+    "appId": "com.kgb.pegawai",
+    "productName": "Aplikasi KGB Pegawai",
+    "asar": true,
+    "directories": {
+      "buildResources": "build",
+      "output": "dist-app"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "src/assets/database/SQLite.db",
+        "to": "database/SQLite.db"
+      },
+      {
+        "from": "templates",
+        "to": "templates"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -31,6 +65,7 @@
     "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
     "electron": "^44.1.1",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.79.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",

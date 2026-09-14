@@ -15,14 +15,32 @@ const docxtemplater_1 = __importDefault(require("docxtemplater"));
 // Saat production (app.isPackaged): app sudah di-bundle oleh electron-builder
 const isDev = process.env.NODE_ENV === 'development' || !electron_1.app.isPackaged;
 // ─── Path database SQLite ─────────────────────────────────────────────────────
-// Development: path relatif dari project root ke file DB yang sudah ada
-// Production : path ke resources yang di-bundle oleh electron-builder
-const dbPath = isDev
-    ? path_1.default.resolve(process.cwd(), 'src', 'assets', 'database', 'SQLite.db')
-    : path_1.default.join(process.resourcesPath, 'database', 'SQLite.db');
+let dbPath = '';
+if (isDev) {
+    // Development: path relatif dari project root ke file DB yang sudah ada
+    dbPath = path_1.default.resolve(process.cwd(), 'src', 'assets', 'database', 'SQLite.db');
+}
+else {
+    // Production: Database harus dipindah ke userData agar bisa dibaca/tulis (tidak Read-Only)
+    const userDataPath = electron_1.app.getPath('userData');
+    const dbDir = path_1.default.join(userDataPath, 'database');
+    dbPath = path_1.default.join(dbDir, 'SQLite.db');
+    // Jika DB belum ada di userData, copy dari resourcesPath (template bawaan instalasi)
+    if (!fs_1.default.existsSync(dbPath)) {
+        console.log('[Main] Database belum ada di userData. Mengkopi dari resources...');
+        if (!fs_1.default.existsSync(dbDir)) {
+            fs_1.default.mkdirSync(dbDir, { recursive: true });
+        }
+        const sourceDbPath = path_1.default.join(process.resourcesPath, 'database', 'SQLite.db');
+        if (fs_1.default.existsSync(sourceDbPath)) {
+            fs_1.default.copyFileSync(sourceDbPath, dbPath);
+        }
+        else {
+            console.error('[Main] FATAL: Source database tidak ditemukan di resources:', sourceDbPath);
+        }
+    }
+}
 console.log('[Main] DB path:', dbPath);
-console.log('[Main] Mode:', isDev ? 'development' : 'production');
-// ─── Buka koneksi ke database ─────────────────────────────────────────────────
 let db;
 try {
     db = new better_sqlite3_1.default(dbPath);
@@ -199,7 +217,8 @@ electron_1.ipcMain.handle('doc:generateKGB', async (_, id) => {
         // Hitung tanggal surat: bulan berlaku KGB (bulan_pengangkatan) dikurangi 3 bulan, hari kerja terdekat
         const tanggalSurat = formatTanggalSurat(currentYear, bulan_pengangkatan);
         // 2. Baca template Word
-        const templatePath = path_1.default.resolve(process.cwd(), 'templates', 'kgb-template.docx');
+        const templateDir = isDev ? path_1.default.resolve(process.cwd(), 'templates') : path_1.default.join(process.resourcesPath, 'templates');
+        const templatePath = path_1.default.join(templateDir, 'kgb-template.docx');
         if (!fs_1.default.existsSync(templatePath)) {
             return { success: false, error: `Template tidak ditemukan di: ${templatePath}` };
         }
@@ -234,13 +253,15 @@ electron_1.ipcMain.handle('doc:generateKGB', async (_, id) => {
             compression: 'DEFLATE',
         });
         // 5. Simpan file
-        const outputDir = path_1.default.resolve(process.cwd(), 'output');
+        // Menggunakan direktori "Documents" user agar tidak terjadi EPERM (Akses Ditolak) saat versi Build (.exe)
+        const documentsPath = electron_1.app.getPath('documents');
+        const outputDir = path_1.default.join(documentsPath, 'Dokumen KGB');
         if (!fs_1.default.existsSync(outputDir)) {
             fs_1.default.mkdirSync(outputDir, { recursive: true });
         }
         // Sanitasi nama untuk nama file yang valid
         const safeName = nama.replace(/[^a-zA-Z0-9 \-_]/g, '_').trim();
-        const outPath = path_1.default.join(outputDir, `test-${safeName}.docx`);
+        const outPath = path_1.default.join(outputDir, `KGB_${currentYear}_${safeName}.docx`);
         fs_1.default.writeFileSync(outPath, buf);
         console.log(`[Main] Dokumen berhasil dibuat di: ${outPath}`);
         return { success: true, filePath: outPath };

@@ -4,7 +4,7 @@ import GeneratedButton from './GeneratedButton';
 
 interface TableProps {
   /** Data hasil query KGB dari SQLite. Kosong jika belum di-load atau mode browser. */
-  data: PegawaiKGB[] | PegawaiRow[];
+  data: (PegawaiKGB | PegawaiRow)[];
 }
 
 export default function Table({ data }: TableProps) {

@@ -5,12 +5,12 @@ export default function Header() {
 
                 <div className="flex items-center gap-3 py-4">
                     <img
-                        src="/LOGO-BIN.png"
+                        src="./LOGO-BIN.png"
                         alt="Logo Kejaksaan RI"
                         className="h-10 w-10 object-contain"
                     />
                     <img
-                        src="/logo.png"
+                        src="./logo.png"
                         alt="Logo Kejaksaan RI"
                         className="h-10 w-10 object-contain"
                     />

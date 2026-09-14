@@ -13,16 +13,33 @@ import Docxtemplater from 'docxtemplater';
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 // ─── Path database SQLite ─────────────────────────────────────────────────────
-// Development: path relatif dari project root ke file DB yang sudah ada
-// Production : path ke resources yang di-bundle oleh electron-builder
-const dbPath = isDev
-  ? path.resolve(process.cwd(), 'src', 'assets', 'database', 'SQLite.db')
-  : path.join(process.resourcesPath, 'database', 'SQLite.db');
+let dbPath = '';
+
+if (isDev) {
+  // Development: path relatif dari project root ke file DB yang sudah ada
+  dbPath = path.resolve(process.cwd(), 'src', 'assets', 'database', 'SQLite.db');
+} else {
+  // Production: Database harus dipindah ke userData agar bisa dibaca/tulis (tidak Read-Only)
+  const userDataPath = app.getPath('userData');
+  const dbDir = path.join(userDataPath, 'database');
+  dbPath = path.join(dbDir, 'SQLite.db');
+
+  // Jika DB belum ada di userData, copy dari resourcesPath (template bawaan instalasi)
+  if (!fs.existsSync(dbPath)) {
+    console.log('[Main] Database belum ada di userData. Mengkopi dari resources...');
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    const sourceDbPath = path.join(process.resourcesPath, 'database', 'SQLite.db');
+    if (fs.existsSync(sourceDbPath)) {
+      fs.copyFileSync(sourceDbPath, dbPath);
+    } else {
+      console.error('[Main] FATAL: Source database tidak ditemukan di resources:', sourceDbPath);
+    }
+  }
+}
 
 console.log('[Main] DB path:', dbPath);
-console.log('[Main] Mode:', isDev ? 'development' : 'production');
-
-// ─── Buka koneksi ke database ─────────────────────────────────────────────────
 let db: ReturnType<typeof Database>;
 
 try {
@@ -237,7 +254,9 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
     const tanggalSurat = formatTanggalSurat(currentYear, bulan_pengangkatan);
 
     // 2. Baca template Word
-    const templatePath = path.resolve(process.cwd(), 'templates', 'kgb-template.docx');
+    const templateDir = isDev ? path.resolve(process.cwd(), 'templates') : path.join(process.resourcesPath, 'templates');
+    const templatePath = path.join(templateDir, 'kgb-template.docx');
+
     if (!fs.existsSync(templatePath)) {
       return { success: false, error: `Template tidak ditemukan di: ${templatePath}` };
     }
