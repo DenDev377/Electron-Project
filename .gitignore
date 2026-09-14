@@ -28,9 +28,6 @@ dist-ssr
 .env.test
 .env.test.local
 src/assets/database/SQLite.db
-# Ignore all files in electron folder
-electron/*
 # Ignore all files in dist-electron folder
 dist-electron/*
 output/*
-templates/*
