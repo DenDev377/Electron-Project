@@ -276,14 +276,16 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
     });
 
     // 5. Simpan file
-    const outputDir = path.resolve(process.cwd(), 'output');
+    // Menggunakan direktori "Documents" user agar tidak terjadi EPERM (Akses Ditolak) saat versi Build (.exe)
+    const documentsPath = app.getPath('documents');
+    const outputDir = path.join(documentsPath, 'Dokumen KGB');
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
     // Sanitasi nama untuk nama file yang valid
     const safeName = nama.replace(/[^a-zA-Z0-9 \-_]/g, '_').trim();
-    const outPath = path.join(outputDir, `test-${safeName}.docx`);
+    const outPath = path.join(outputDir, `KGB_${currentYear}_${safeName}.docx`);
     fs.writeFileSync(outPath, buf);
 
     console.log(`[Main] Dokumen berhasil dibuat di: ${outPath}`);
