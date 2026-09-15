@@ -21,7 +21,7 @@ export default function Table({ data }: TableProps) {
       try {
         const result = await window.electronAPI.generateDokumenKGB(item.id);
         if (result.success) {
-          // Sukses generate, biarkan user bisa generate ulang jika perlu
+          alert(`Dokumen berhasil dibuat!\n\nTersimpan otomatis di:\n${result.filePath}`);
         } else {
           alert(`Gagal: ${result.error}`);
         }

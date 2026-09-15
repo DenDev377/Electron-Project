@@ -19,7 +19,7 @@
     "asar": true,
     "directories": {
       "buildResources": "build",
-      "output": "dist-app"
+      "output": "final-app-build"
     },
     "files": [
       "dist/**/*",
