@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { PegawaiKGB, PegawaiRow } from '../types/pegawai';
 import GeneratedButton from './GeneratedButton';
 
@@ -16,7 +16,17 @@ type SortMode = 'nama' | 'kgb_asc' | 'kgb_desc';
 
 export default function Table({ data }: TableProps) {
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>('kgb_asc');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragMode, setDragMode] = useState<'select' | 'deselect'>('select');
+
+  useEffect(() => {
+    const handleMouseUp = () => setIsDragging(false);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
 
   const handleGenerate = async (item: PegawaiKGB | PegawaiRow) => {
     if (!('id' in item) || item.id === undefined) {
@@ -40,6 +50,87 @@ export default function Table({ data }: TableProps) {
       }
     } else {
       alert("Fitur generate hanya bisa digunakan dalam aplikasi desktop.");
+    }
+  };
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const allValidIds = data.filter(d => 'id' in d && d.id !== undefined).map(d => (d as any).id);
+      setSelectedIds(new Set(allValidIds));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleMouseDownRow = (e: React.MouseEvent, id: number, currentlySelected: boolean) => {
+    if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input[type="checkbox"]')) return;
+    
+    // Prevent text selection when dragging
+    e.preventDefault();
+
+    setIsDragging(true);
+    const newMode = currentlySelected ? 'deselect' : 'select';
+    setDragMode(newMode);
+    
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newMode === 'select') newSet.add(id);
+      else newSet.delete(id);
+      return newSet;
+    });
+  };
+
+  const handleMouseEnterRow = (id: number) => {
+    if (!isDragging) return;
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (dragMode === 'select') newSet.add(id);
+      else newSet.delete(id);
+      return newSet;
+    });
+  };
+
+  const handleSelectRowCheckbox = (id: number) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleGenerateSelected = async () => {
+    if (!window.electronAPI) {
+      alert("Fitur generate hanya bisa digunakan dalam aplikasi desktop.");
+      return;
+    }
+    
+    setIsGeneratingBatch(true);
+    let successCount = 0;
+    let failCount = 0;
+    
+    try {
+      for (const id of Array.from(selectedIds)) {
+        setProcessingId(id);
+        const result = await window.electronAPI.generateDokumenKGB(id);
+        if (result.success) {
+          successCount++;
+        } else {
+          failCount++;
+          console.error(`Gagal generate ID ${id}: ${result.error}`);
+        }
+      }
+      
+      alert(`Selesai! Berhasil membuat ${successCount} dokumen.${failCount > 0 ? `\nGagal membuat ${failCount} dokumen.` : ''}`);
+      setSelectedIds(new Set());
+    } catch (err) {
+      alert(`Terjadi error saat generate massal: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsGeneratingBatch(false);
+      setProcessingId(null);
     }
   };
 
@@ -137,10 +228,44 @@ export default function Table({ data }: TableProps) {
   };
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-      <table className="min-w-full divide-y divide-gray-200">
+    <div className="flex flex-col gap-3">
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between p-3 bg-[#F4F3FF] border border-[#E0DEFF] rounded-lg animate-in fade-in slide-in-from-top-2">
+          <span className="text-sm font-medium text-[#635BFF]">
+            {selectedIds.size} pegawai dipilih
+          </span>
+          <button
+            onClick={handleGenerateSelected}
+            disabled={isGeneratingBatch}
+            className="px-4 py-2 text-sm font-medium text-white bg-[#635BFF] rounded-md hover:bg-[#5249ea] transition-colors focus:outline-none focus:ring-2 focus:ring-[#635BFF] focus:ring-offset-2 disabled:opacity-50 flex items-center gap-2"
+          >
+            {isGeneratingBatch ? (
+              <>
+                <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generating...
+              </>
+            ) : (
+              'Generate Selected'
+            )}
+          </button>
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+        <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
+            <th scope="col" className="px-4 py-4 text-center w-12">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 rounded border-gray-300 text-[#635BFF] focus:ring-[#635BFF] cursor-pointer"
+                checked={selectedIds.size > 0 && selectedIds.size === data.filter(d => 'id' in d && d.id !== undefined).length}
+                onChange={handleSelectAll}
+                disabled={isGeneratingBatch}
+              />
+            </th>
             <th scope="col" className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
               No
             </th>
@@ -179,7 +304,7 @@ export default function Table({ data }: TableProps) {
           {sortedData.length === 0 ? (
             <tr>
               <td
-                colSpan={8}
+                colSpan={9}
                 className="px-6 py-12 text-center text-sm text-gray-500 bg-gray-50/50"
               >
                 <div className="flex flex-col items-center gap-2">
@@ -197,7 +322,31 @@ export default function Table({ data }: TableProps) {
               const isFutureKgb = tahunKgbBerikutnya && tahunKgbBerikutnya > currentYear;
               
               return (
-              <tr key={index} className={`hover:bg-gray-50/80 transition-colors ${isFutureKgb ? 'opacity-40 bg-gray-50/30' : ''}`}>
+              <tr 
+                key={index} 
+                className={`transition-colors cursor-pointer select-none ${isFutureKgb ? 'opacity-40 bg-gray-50/30 hover:bg-gray-50/60' : 'hover:bg-gray-50/80'} ${'id' in item && item.id !== undefined && selectedIds.has(item.id) ? 'bg-[#F4F3FF] hover:bg-[#EAE8FF]' : ''}`}
+                onMouseDown={(e) => {
+                  if ('id' in item && item.id !== undefined) {
+                    handleMouseDownRow(e, item.id, selectedIds.has(item.id));
+                  }
+                }}
+                onMouseEnter={() => {
+                  if ('id' in item && item.id !== undefined) {
+                    handleMouseEnterRow(item.id);
+                  }
+                }}
+              >
+                <td className="px-4 py-3 text-center">
+                  {'id' in item && item.id !== undefined && (
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-gray-300 text-[#635BFF] focus:ring-[#635BFF] cursor-pointer"
+                      checked={selectedIds.has(item.id)}
+                      onChange={() => handleSelectRowCheckbox(item.id as number)}
+                      disabled={isGeneratingBatch}
+                    />
+                  )}
+                </td>
                 <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
                   {index + 1}
                 </td>
@@ -238,6 +387,7 @@ export default function Table({ data }: TableProps) {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

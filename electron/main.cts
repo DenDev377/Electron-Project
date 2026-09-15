@@ -141,6 +141,12 @@ function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
 }
 
+// Helper: Ubah teks menjadi Title Case (Huruf besar di awal kata)
+function toTitleCase(str: string | null | undefined): string {
+  if (!str) return '';
+  return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
+}
+
 /**
  * Helper: Hitung tanggal surat KGB.
  * Aturan:
@@ -325,7 +331,7 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       nip,
       pangkat_golongan: textPangkatGolongan,
       dalam_golongan: textDalamGolongan,
-      satuan_kerja: satuan_kerja || '-',
+      satuan_kerja: satuan_kerja ? toTitleCase(satuan_kerja) : '-',
       tanggal_pengangkatan: tanggalPengangkatan,
       tanggal_berlaku: tanggalBerlaku,
       masa_kerja: masaKerja, // Kompatibilitas untuk template lama
