@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { importEmployeesToDatabase, getPegawaiKGB, resetPegawai } from './db.cjs';
@@ -109,6 +109,52 @@ ipcMain.handle('db:resetPegawai', async () => {
       err instanceof Error ? err.message : 'Gagal mereset data pegawai.'
     );
   }
+});
+
+const configPath = path.join(app.getPath('userData'), 'config.json');
+
+function getSavedOutputFolder(): string {
+  try {
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (config.outputFolder) {
+        return config.outputFolder;
+      }
+    }
+  } catch (err) {
+    console.error('[Main] Gagal membaca config.json:', err);
+  }
+  return path.join(app.getPath('documents'), 'Dokumen KGB');
+}
+
+function saveOutputFolder(folderPath: string) {
+  try {
+    let config: any = {};
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+    config.outputFolder = folderPath;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[Main] Gagal menyimpan config.json:', err);
+  }
+}
+
+ipcMain.handle('doc:selectOutputFolder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Pilih Folder Penyimpanan Dokumen KGB'
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  const folderPath = result.filePaths[0];
+  saveOutputFolder(folderPath);
+  return folderPath;
+});
+
+ipcMain.handle('doc:getOutputFolder', async () => {
+  return getSavedOutputFolder();
 });
 
 const NAMA_BULAN = [
@@ -349,9 +395,7 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
     });
 
     // 5. Simpan file
-    // Menggunakan direktori "Documents" user agar tidak terjadi EPERM (Akses Ditolak) saat versi Build (.exe)
-    const documentsPath = app.getPath('documents');
-    const outputDir = path.join(documentsPath, 'Dokumen KGB');
+    const outputDir = getSavedOutputFolder();
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }

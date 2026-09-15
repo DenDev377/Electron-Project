@@ -31,4 +31,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
      * Mereset seluruh data pegawai
      */
     resetPegawai: () => electron_1.ipcRenderer.invoke('db:resetPegawai'),
+    selectOutputFolder: () => electron_1.ipcRenderer.invoke('doc:selectOutputFolder'),
+    getOutputFolder: () => electron_1.ipcRenderer.invoke('doc:getOutputFolder'),
 });

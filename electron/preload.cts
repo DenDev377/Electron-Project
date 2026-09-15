@@ -39,4 +39,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resetPegawai: (): Promise<boolean> =>
     ipcRenderer.invoke('db:resetPegawai'),
 
+  selectOutputFolder: (): Promise<string | null> =>
+    ipcRenderer.invoke('doc:selectOutputFolder'),
+
+  getOutputFolder: (): Promise<string> =>
+    ipcRenderer.invoke('doc:getOutputFolder'),
+
 });

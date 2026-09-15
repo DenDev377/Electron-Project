@@ -9,6 +9,8 @@ export interface ElectronAPI {
   getPegawaiKGB:  () => Promise<PegawaiKGB[]>;
   generateDokumenKGB: (id: number) => Promise<{ success: boolean; filePath?: string; error?: string }>;
   resetPegawai: () => Promise<boolean>;
+  selectOutputFolder: () => Promise<string | null>;
+  getOutputFolder: () => Promise<string>;
 }
 
 declare global {

@@ -9,11 +9,27 @@ export default function App() {
   const [pegawaiData, setPegawaiData] = useState<(PegawaiRow | PegawaiKGB)[]>([]);
   // Hasil import ke database — untuk ditampilkan di result card
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  // Folder output
+  const [outputFolder, setOutputFolder] = useState<string>('');
 
   // Ambil data KGB dari database saat aplikasi dimuat pertama kali
   useEffect(() => {
     fetchPegawaiKGB();
+    if (window.electronAPI) {
+      window.electronAPI.getOutputFolder().then(folder => {
+        if (folder) setOutputFolder(folder);
+      });
+    }
   }, []);
+
+  async function handleChangeFolder() {
+    if (window.electronAPI) {
+      const newFolder = await window.electronAPI.selectOutputFolder();
+      if (newFolder) {
+        setOutputFolder(newFolder);
+      }
+    }
+  }
 
   async function fetchPegawaiKGB() {
     if (window.electronAPI) {
@@ -90,6 +106,27 @@ export default function App() {
           />
         </div>
       </div>
+
+      {/* ── Info Folder Output ── */}
+      {outputFolder && (
+        <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+            <div className="text-sm">
+              <span className="text-gray-500">Folder Penyimpanan: </span>
+              <span className="font-medium text-gray-700 truncate" title={outputFolder}>{outputFolder}</span>
+            </div>
+          </div>
+          <button
+            onClick={handleChangeFolder}
+            className="ml-4 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#635BFF] focus:border-transparent flex-shrink-0 transition-colors"
+          >
+            Ubah Folder
+          </button>
+        </div>
+      )}
 
       {/* ── Hasil Import Database ── */}
       {importResult && (

@@ -104,6 +104,49 @@ electron_1.ipcMain.handle('db:resetPegawai', async () => {
         throw new Error(err instanceof Error ? err.message : 'Gagal mereset data pegawai.');
     }
 });
+const configPath = path_1.default.join(electron_1.app.getPath('userData'), 'config.json');
+function getSavedOutputFolder() {
+    try {
+        if (fs_1.default.existsSync(configPath)) {
+            const config = JSON.parse(fs_1.default.readFileSync(configPath, 'utf8'));
+            if (config.outputFolder) {
+                return config.outputFolder;
+            }
+        }
+    }
+    catch (err) {
+        console.error('[Main] Gagal membaca config.json:', err);
+    }
+    return path_1.default.join(electron_1.app.getPath('documents'), 'Dokumen KGB');
+}
+function saveOutputFolder(folderPath) {
+    try {
+        let config = {};
+        if (fs_1.default.existsSync(configPath)) {
+            config = JSON.parse(fs_1.default.readFileSync(configPath, 'utf8'));
+        }
+        config.outputFolder = folderPath;
+        fs_1.default.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    }
+    catch (err) {
+        console.error('[Main] Gagal menyimpan config.json:', err);
+    }
+}
+electron_1.ipcMain.handle('doc:selectOutputFolder', async () => {
+    const result = await electron_1.dialog.showOpenDialog({
+        properties: ['openDirectory'],
+        title: 'Pilih Folder Penyimpanan Dokumen KGB'
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+        return null;
+    }
+    const folderPath = result.filePaths[0];
+    saveOutputFolder(folderPath);
+    return folderPath;
+});
+electron_1.ipcMain.handle('doc:getOutputFolder', async () => {
+    return getSavedOutputFolder();
+});
 const NAMA_BULAN = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -302,9 +345,7 @@ electron_1.ipcMain.handle('doc:generateKGB', async (_, id) => {
             compression: 'DEFLATE',
         });
         // 5. Simpan file
-        // Menggunakan direktori "Documents" user agar tidak terjadi EPERM (Akses Ditolak) saat versi Build (.exe)
-        const documentsPath = electron_1.app.getPath('documents');
-        const outputDir = path_1.default.join(documentsPath, 'Dokumen KGB');
+        const outputDir = getSavedOutputFolder();
         if (!fs_1.default.existsSync(outputDir)) {
             fs_1.default.mkdirSync(outputDir, { recursive: true });
         }
