@@ -2,6 +2,71 @@ import type { PegawaiRow, Employee, ImportError } from '../types/pegawai';
 import { parseNipDate } from './nipParser';
 
 /**
+ * Mengekstrak golongan dari string mentah seperti "2c" atau "II/c".
+ */
+function parseGolonganMentah(raw: string): { gol: string; sub: string } | null {
+  const cleaned = raw.trim().toLowerCase();
+  
+  const arabicMatch = cleaned.match(/^([1-4])\s*\/?\s*([a-e])$/);
+  if (arabicMatch) {
+    const romawis = ['', 'I', 'II', 'III', 'IV'];
+    return { gol: romawis[parseInt(arabicMatch[1], 10)], sub: arabicMatch[2] };
+  }
+  
+  const romawiMatch = cleaned.match(/^([ivx]+)[\s/\-]*([a-e])$/);
+  if (romawiMatch) {
+    return { gol: romawiMatch[1].toUpperCase(), sub: romawiMatch[2] };
+  }
+  
+  return null;
+}
+
+/**
+ * Menghitung kredit/penyesuaian MKG berdasarkan golongan awal & sekarang.
+ */
+function hitungMkgAwalOtomatis(golSekarang: string, subSekarang: string, rawGolAwal?: string): number {
+  const currGol = golSekarang.toUpperCase();
+  const currSub = subSekarang.toLowerCase();
+  
+  if (!rawGolAwal) return 0;
+
+  const awal = parseGolonganMentah(rawGolAwal);
+  if (!awal) return 0;
+  
+  const startGol = awal.gol;
+  const startSub = awal.sub;
+
+  // 1. Kredit awal berdasarkan formasi pertama kali masuk
+  let offset = 0;
+  if (startSub === 'b' || startSub === 'c' || startSub === 'd') {
+    offset = 3;
+  }
+
+  const mapGol: Record<string, number> = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4 };
+  const s = mapGol[startGol];
+  const c = mapGol[currGol];
+
+  if (!s || !c) return offset;
+
+  // 2. Evaluasi apakah sudah melompat ke Golongan yang lebih tinggi (Penyesuaian Ijazah)
+  
+  // Jika pernah melompat dari Golongan I ke II
+  if (s === 1 && c >= 2) {
+    offset -= 6; // Pengurangan 6 tahun
+  }
+
+  // Jika pernah melompat dari Golongan II ke III
+  if (s <= 2 && c >= 3) {
+    offset -= 5; // Pengurangan 5 tahun
+  }
+
+  // Catatan: Tidak ada pengurangan untuk perpindahan dari III ke IV, 
+  // sehingga offset akan dipertahankan utuh.
+  
+  return offset;
+}
+
+/**
  * Hasil transformasi data dari format Excel (PegawaiRow)
  * ke format siap database (Employee).
  */
@@ -83,6 +148,19 @@ export function transformEmployeeData(rows: PegawaiRow[]): TransformResult {
       // ─── 5. Hitung total masa kerja ────────────────────────────────
       const total_masa_kerja = tahunSekarang - tahun_pengangkatan;
 
+      // ─── 6. Hitung MKG awal (kredit MKG formasi langsung) ──────────
+      // Deteksi Pangkat Awal dari NRP (NRP berawalan 6=3a, 5=2c, 4=2a)
+      let golAwalOtomatis: string | undefined;
+      if (row.nrp) {
+        if (row.nrp.startsWith('6')) golAwalOtomatis = '3a';
+        else if (row.nrp.startsWith('5')) golAwalOtomatis = '2c';
+        else if (row.nrp.startsWith('4')) golAwalOtomatis = '2a';
+      }
+
+      // Jika ada di data Excel (contoh: Penyesuaian MKG = -5 untuk II/d ke III/a), gunakan itu.
+      // Jika tidak ada, tapi NRP terdeteksi, sistem hitung otomatis pengurangnya.
+      const mkg_awal = row.mkg_awal ?? hitungMkgAwalOtomatis(row.golongan.trim(), row.subgolongan.trim(), golAwalOtomatis);
+
       valid.push({
         nip,
         nama:        row.nama.trim(),
@@ -91,6 +169,7 @@ export function transformEmployeeData(rows: PegawaiRow[]): TransformResult {
         tahun_pengangkatan,
         bulan_pengangkatan,
         total_masa_kerja,
+        mkg_awal,
         pangkat_golongan: row.pangkat_golongan?.trim() || undefined,
         satuan_kerja:   row.satuan_kerja?.trim()   || undefined,
         status_pegawai: row.status_pegawai?.trim() || undefined,

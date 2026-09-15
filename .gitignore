@@ -31,3 +31,4 @@ src/assets/database/SQLite.db
 # Ignore all files in dist-electron folder
 dist-electron/*
 output/*
+daftar_pegawai_*.xlsx

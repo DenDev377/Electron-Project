@@ -33,4 +33,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateDokumenKGB: (id: number) =>
     ipcRenderer.invoke('doc:generateKGB', id),
 
+  /**
+   * Mereset seluruh data pegawai
+   */
+  resetPegawai: (): Promise<boolean> =>
+    ipcRenderer.invoke('db:resetPegawai'),
+
 });

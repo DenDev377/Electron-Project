@@ -9,6 +9,9 @@ const HEADER_MAP: Record<string, keyof PegawaiRow> = {
   // NIP
   'nip': 'nip',
   'nip/nrp': 'nip',
+  'nip / nrp': 'nip',
+  'n i p': 'nip',
+  'n.i.p': 'nip',
   // Nama
   'nama': 'nama',
   'nama pegawai': 'nama',
@@ -22,28 +25,38 @@ const HEADER_MAP: Record<string, keyof PegawaiRow> = {
   'subgolongan': 'subgolongan',
   'sub golongan': 'subgolongan',
   'ruang': 'subgolongan',
+  // MKG Awal / Penyesuaian MKG
+  'mkg awal': 'mkg_awal',
+  'penyesuaian mkg': 'mkg_awal',
+  'kredit mkg': 'mkg_awal',
+  'pengurang mkg': 'mkg_awal',
   'satker': 'satuan_kerja',
   'satuan kerja': 'satuan_kerja',
   'status pegawai': 'status_pegawai',
 };
 
 /**
- * Mengekstrak 18-digit NIP dari string seperti:
+ * Mengekstrak 18-digit NIP dan NRP (jika ada) dari string seperti:
  *   "197505152000031003 / 60075136"
- *   → "197505152000031003"
- *
- * Strategi: pecah dengan "/" lalu ambil bagian yang berisi 18 digit angka.
- * Jika tidak ditemukan, kembalikan bagian pertama (fallback).
+ *   → { nip: "197505152000031003", nrp: "60075136" }
  */
-function parseNip(raw: string): string {
+function parseNip(raw: string): { nip: string; nrp: string } {
   // Hapus semua tanda petik (', ", `) yang kadang muncul
-  // ketika kolom Excel diformat sebagai teks
   const cleaned = raw.replace(/['"``]/g, '').trim();
 
   const parts = cleaned.split('/').map((p) => p.trim());
   // Cari bagian yang tepat 18 digit angka (format NIP PNS)
   const nipPart = parts.find((p) => /^\d{18}$/.test(p));
-  return nipPart ?? parts[0] ?? cleaned;
+  const nip = nipPart ?? parts[0] ?? cleaned;
+  
+  // NRP biasanya bagian lainnya setelah '/'
+  let nrp = '';
+  if (parts.length > 1) {
+    const nrpPart = parts.find(p => p !== nipPart);
+    if (nrpPart) nrp = nrpPart;
+  }
+  
+  return { nip, nrp };
 }
 
 /**
@@ -55,16 +68,28 @@ function parseNip(raw: string): string {
  * Romawi yang valid untuk PNS: I, II, III, IV (dan variasinya)
  */
 function parseGolonganField(raw: string): { golongan: string; subgolongan: string } {
-  // Regex: cari pola (ROMAWI/huruf) di dalam string, contoh: (IV/a), (III/c)
-  const match = raw.match(/\(([IVX]+)\/([a-d])\)/i);
-  if (match) {
-    return {
-      golongan: match[1].toUpperCase(),   // contoh: "IV"
-      subgolongan: match[2].toLowerCase(), // contoh: "a"
-    };
+  const cleaned = raw.trim().toLowerCase();
+
+  // Match pola 1: "2c", "3a", "4b" (Arabic)
+  const arabicMatch = cleaned.match(/^([1-4])\s*\/?\s*([a-e])$/);
+  if (arabicMatch) {
+    const romawis = ['', 'I', 'II', 'III', 'IV'];
+    return { golongan: romawis[parseInt(arabicMatch[1], 10)], subgolongan: arabicMatch[2] };
   }
 
-  // Fallback: kembalikan nilai mentah (tidak ada pola kurung yang cocok)
+  // Match pola 2: "II/c", "IIIa", "IV-b" (Roman)
+  const romawiMatch = cleaned.match(/^([ivx]+)[\s/\-]*([a-e])$/);
+  if (romawiMatch) {
+    return { golongan: romawiMatch[1].toUpperCase(), subgolongan: romawiMatch[2] };
+  }
+
+  // Match pola 3: "(IV/a)" (Biasa dipakai di format lengkap)
+  const bracketMatch = cleaned.match(/\(([ivx]+)\/([a-e])\)/);
+  if (bracketMatch) {
+    return { golongan: bracketMatch[1].toUpperCase(), subgolongan: bracketMatch[2] };
+  }
+
+  // Fallback: kembalikan nilai mentah (tidak ada pola yang cocok)
   return { golongan: raw, subgolongan: '' };
 }
 
@@ -123,8 +148,12 @@ export async function parseExcelFile(file: File): Promise<PegawaiRow[]> {
             : '';
 
         if (field === 'nip') {
-          // Ekstrak 18-digit NIP dari string seperti "197505152000031003 / 60075136"
-          entry.nip = parseNip(strValue);
+          // Ekstrak 18-digit NIP dan NRP dari string seperti "197505152000031003 / 60075136"
+          const parsedNip = parseNip(strValue);
+          entry.nip = parsedNip.nip;
+          if (parsedNip.nrp) {
+            entry.nrp = parsedNip.nrp;
+          }
 
         } else if (field === 'golongan') {
           // Ekstrak romawi DAN subgolongan dari satu kolom
