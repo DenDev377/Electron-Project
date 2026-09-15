@@ -45,22 +45,50 @@ export default function App() {
     setImportResult(null);
   }
 
+  async function handleResetPegawai() {
+    if (!window.electronAPI) return;
+    
+    const confirmReset = window.confirm("Apakah Anda yakin ingin menghapus semua data pegawai? Data terkait gaji tidak akan ikut terhapus.");
+    if (!confirmReset) return;
+
+    try {
+      const success = await window.electronAPI.resetPegawai();
+      if (success) {
+        // Refresh data setelah berhasil dihapus
+        fetchPegawaiKGB();
+      } else {
+        alert("Gagal mereset data pegawai. Silakan coba lagi.");
+      }
+    } catch (error) {
+      console.error("Error mereset data:", error);
+      alert("Terjadi kesalahan sistem saat mencoba mereset data.");
+    }
+  }
+
   return (
-    <div className="p-6 flex flex-col gap-4">
+    <div className="p-6 flex flex-col gap-4 min-w-0">
       {/* ── Toolbar ── */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-800">Data Pegawai</h2>
           {pegawaiData.length > 0 && (
             <p className="text-xs text-gray-400 mt-0.5">
-              {pegawaiData.length} data dibaca dari Excel
+              {pegawaiData.length} pegawai dengan data KGB
             </p>
           )}
         </div>
-        <ImportButton
-          onImport={handleImport}
-          onImportResult={handleImportResult}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleResetPegawai}
+            className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+          >
+            Reset Data
+          </button>
+          <ImportButton
+            onImport={handleImport}
+            onImportResult={handleImportResult}
+          />
+        </div>
       </div>
 
       {/* ── Hasil Import Database ── */}

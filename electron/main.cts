@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import Database from 'better-sqlite3';
-import { importEmployeesToDatabase, getPegawaiKGB } from './db.cjs';
+import { importEmployeesToDatabase, getPegawaiKGB, resetPegawai } from './db.cjs';
 import type { Employee } from '../src/types/pegawai.js';
 import fs from 'fs';
 import PizZip from 'pizzip';
@@ -94,6 +94,23 @@ ipcMain.handle('db:getPegawaiKGB', async () => {
   }
 });
 
+/**
+ * Channel: 'db:resetPegawai'
+ * Menghapus semua data pegawai tanpa menghapus tabel gaji.
+ */
+ipcMain.handle('db:resetPegawai', async () => {
+  console.log('[Main] Mereset data pegawai...');
+  try {
+    const result = resetPegawai(db);
+    return result;
+  } catch (err) {
+    console.error('[Main] Error reset data pegawai:', err);
+    throw new Error(
+      err instanceof Error ? err.message : 'Gagal mereset data pegawai.'
+    );
+  }
+});
+
 const NAMA_BULAN = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -156,7 +173,7 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
   console.log(`[Main] generateDokumenKGB dipanggil untuk id: ${id}`);
   try {
     // 1. Ambil data pegawai berdasarkan id
-    const stmt = db.prepare('SELECT nama, nip, satuan_kerja, tahun_pengangkatan, bulan_pengangkatan, golongan, subgolongan, pangkat_golongan, total_masa_kerja FROM pegawai WHERE id = ?');
+    const stmt = db.prepare('SELECT nama, nip, satuan_kerja, tahun_pengangkatan, bulan_pengangkatan, golongan, subgolongan, pangkat_golongan, total_masa_kerja, mkg_awal FROM pegawai WHERE id = ?');
     const row = stmt.get(id) as {
       nama: string;
       nip: string;
@@ -167,48 +184,76 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       subgolongan: string;
       pangkat_golongan: string | null;
       total_masa_kerja: number;
+      mkg_awal: number | null;
     } | undefined;
 
     if (!row) {
       return { success: false, error: `Pegawai dengan ID ${id} tidak ditemukan.` };
     }
-    const { nama, nip, satuan_kerja, tahun_pengangkatan, bulan_pengangkatan, golongan, subgolongan, pangkat_golongan, total_masa_kerja } = row;
+    const { nama, nip, satuan_kerja, tahun_pengangkatan, bulan_pengangkatan, golongan, subgolongan, pangkat_golongan, total_masa_kerja, mkg_awal } = row;
 
     // Validasi data pengangkatan
     if (!tahun_pengangkatan || !bulan_pengangkatan || bulan_pengangkatan < 1 || bulan_pengangkatan > 12) {
       return { success: false, error: `Data tahun atau bulan pengangkatan tidak valid untuk pegawai: ${nama}.` };
     }
 
+    const effective_mkg = total_masa_kerja + (mkg_awal || 0);
     const now = new Date();
     const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1; // 1-12
 
-    // Bentuk data tanggal & masa kerja
-    const tanggalPengangkatan = formatTanggal(currentYear, bulan_pengangkatan);
-
-    const tanggalBerlaku = formatTanggal(currentYear, currentMonth);
-
-    const masaKerja = hitungMasaKerja(tahun_pengangkatan, bulan_pengangkatan, currentYear, currentMonth);
-
-    // Ambil gaji baru
+    // 1. Ambil gaji baru (menggunakan effective_mkg)
     const stmtGajiBaru = db.prepare(`
-      SELECT gaji_pokok 
+      SELECT mkg, gaji_pokok 
       FROM tabel_gaji 
       WHERE golongan = ? COLLATE NOCASE 
         AND subgolongan = ? COLLATE NOCASE 
-        AND mkg = ? 
+        AND mkg >= ? 
         AND gaji_pokok > 0
+      ORDER BY mkg ASC
       LIMIT 1
     `);
-    const rowGajiBaru = stmtGajiBaru.get(golongan, subgolongan, total_masa_kerja) as { gaji_pokok: number } | undefined;
-    if (!rowGajiBaru || rowGajiBaru.gaji_pokok <= 0) {
-      return { success: false, error: `Gaji baru tidak ditemukan atau tidak valid untuk golongan ${golongan}/${subgolongan} dengan MKG ${total_masa_kerja}.` };
+    const rowGajiBaru = stmtGajiBaru.get(golongan, subgolongan, effective_mkg) as { mkg: number, gaji_pokok: number } | undefined;
+    
+    // Jika tidak ditemukan, coba cari gaji maksimal (mentok)
+    let finalRowGajiBaru = rowGajiBaru;
+    if (!finalRowGajiBaru) {
+      const stmtGajiMax = db.prepare(`
+        SELECT mkg, gaji_pokok 
+        FROM tabel_gaji 
+        WHERE golongan = ? COLLATE NOCASE 
+          AND subgolongan = ? COLLATE NOCASE 
+          AND gaji_pokok > 0
+        ORDER BY mkg DESC
+        LIMIT 1
+      `);
+      finalRowGajiBaru = stmtGajiMax.get(golongan, subgolongan) as { mkg: number, gaji_pokok: number } | undefined;
     }
-    const gaji_baru = formatRupiah(rowGajiBaru.gaji_pokok);
+
+    if (!finalRowGajiBaru || finalRowGajiBaru.gaji_pokok <= 0) {
+      return { success: false, error: `Gaji baru tidak ditemukan atau tidak valid untuk golongan ${golongan}/${subgolongan} dengan MKG ${effective_mkg}.` };
+    }
+    const gaji_baru = formatRupiah(finalRowGajiBaru.gaji_pokok);
+    const targetMkg = finalRowGajiBaru.mkg;
+
+    // Hitung tahun KGB
+    // Target MKG dicapai saat: tahun = currentYear + (targetMkg - effective_mkg)
+    const tahunKgb = currentYear + (targetMkg - effective_mkg);
+    
+    // Bentuk data tanggal & masa kerja
+    const tanggalPengangkatan = formatTanggal(currentYear, bulan_pengangkatan); // BKN format biasanya menggunakan tahun berjalan untuk TMT
+    const tanggalBerlaku = formatTanggal(tahunKgb, bulan_pengangkatan);
+    
+    // Masa kerja dihitung dari tahun pengangkatan sampai tahun KGB (mempertimbangkan offset mkg_awal)
+    // Karena targetMkg sudah merupakan akumulasi yang akurat dari tabel gaji, kita bisa langsung pakai targetMkg.
+    // Jika ingin format "X tahun Y bulan", Y biasanya 0 untuk KGB, atau kita pakai hitungMasaKerja dengan mkg_awal.
+    // Untuk keakuratan, mari kita gunakan fungsi hitungMasaKerja yang dimodifikasi logika offset-nya:
+    const totalBulanAsli = (tahunKgb - tahun_pengangkatan) * 12 + (bulan_pengangkatan - bulan_pengangkatan); // selalu 0 bulan selisihnya di bulan yang sama
+    const totalTahunOffset = (tahunKgb - tahun_pengangkatan) + (mkg_awal || 0);
+    const masaKerja = `${totalTahunOffset} tahun 0 bulan`;
 
     // Ambil gaji lama
     const stmtGajiLama = db.prepare(`
-      SELECT gaji_pokok 
+      SELECT mkg, gaji_pokok 
       FROM tabel_gaji 
       WHERE golongan = ? COLLATE NOCASE 
         AND subgolongan = ? COLLATE NOCASE 
@@ -217,11 +262,12 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       ORDER BY mkg DESC
       LIMIT 1
     `);
-    const rowGajiLama = stmtGajiLama.get(golongan, subgolongan, total_masa_kerja) as { gaji_pokok: number } | undefined;
+    const rowGajiLama = stmtGajiLama.get(golongan, subgolongan, targetMkg) as { mkg: number, gaji_pokok: number } | undefined;
     if (!rowGajiLama || rowGajiLama.gaji_pokok <= 0) {
-      return { success: false, error: `Gaji lama tidak ditemukan. Tidak ada data gaji sebelumnya untuk golongan ${golongan}/${subgolongan} di bawah MKG ${total_masa_kerja}.` };
+      return { success: false, error: `Gaji lama tidak ditemukan. Tidak ada data gaji sebelumnya untuk golongan ${golongan}/${subgolongan} di bawah MKG ${targetMkg}.` };
     }
     const gaji_lama = formatRupiah(rowGajiLama.gaji_pokok);
+    const masa_kerja_lama = `${rowGajiLama.mkg} tahun 0 bulan`;
 
     // Ambil KGB Berikutnya
     const stmtKgbBerikutnya = db.prepare(`
@@ -234,17 +280,17 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       ORDER BY mkg ASC
       LIMIT 1
     `);
-    const rowKgbBerikutnya = stmtKgbBerikutnya.get(golongan, subgolongan, total_masa_kerja) as { mkg: number } | undefined;
+    const rowKgbBerikutnya = stmtKgbBerikutnya.get(golongan, subgolongan, targetMkg) as { mkg: number } | undefined;
 
     let textMkgBerikutnya = '';
     let textTahunKgbBerikutnya = '';
 
     if (rowKgbBerikutnya) {
-      const selisihMkg = rowKgbBerikutnya.mkg - total_masa_kerja;
-      const calculatedYear = currentYear + selisihMkg;
+      const selisihMkg = rowKgbBerikutnya.mkg - targetMkg;
+      const calculatedYearKgbNext = tahunKgb + selisihMkg;
 
       textMkgBerikutnya = rowKgbBerikutnya.mkg.toString();
-      textTahunKgbBerikutnya = formatTanggal(calculatedYear, bulan_pengangkatan);
+      textTahunKgbBerikutnya = formatTanggal(calculatedYearKgbNext, bulan_pengangkatan);
     } else {
       textMkgBerikutnya = '-';
       textTahunKgbBerikutnya = '-';
@@ -282,7 +328,9 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       satuan_kerja: satuan_kerja || '-',
       tanggal_pengangkatan: tanggalPengangkatan,
       tanggal_berlaku: tanggalBerlaku,
-      masa_kerja: masaKerja,
+      masa_kerja: masaKerja, // Kompatibilitas untuk template lama
+      masa_kerja_lama: masa_kerja_lama, // Untuk poin d (Gaji Lama)
+      masa_kerja_baru: masaKerja,       // Untuk poin 7 (Gaji Baru)
       gaji_lama,
       gaji_baru,
       mkg_berikutnya: textMkgBerikutnya,
@@ -321,10 +369,15 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
 // ─── BrowserWindow ────────────────────────────────────────────────────────────
 
 function createWindow(): void {
+  const iconIco = path.join(app.getAppPath(), isDev ? 'public' : 'dist', 'icon.ico');
+  const iconPng = path.join(app.getAppPath(), 'public', 'LOGO-BIN.png');
+  const iconPath = iconIco;
+
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     title: 'Aplikasi KGB Pegawai',
+    icon: iconPath,
     webPreferences: {
       // Preload script: jembatan aman ke main process
       preload: path.join(__dirname, 'preload.cjs'),
@@ -334,6 +387,11 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   });
+
+  // Set icon via PNG (ICO format tidak kompatibel dengan win.setIcon pada semua platform)
+  if (fs.existsSync(iconPng)) {
+    win.setIcon(iconPng);
+  }
 
   if (isDev) {
     // Mode dev: load dari Vite dev server
@@ -349,6 +407,9 @@ function createWindow(): void {
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(isDev ? 'com.kgb.dev.' + Date.now() : 'com.kgb.app');
+  }
   createWindow();
 
   // macOS: buat window baru jika klik icon di dock setelah semua window ditutup

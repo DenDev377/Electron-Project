@@ -1,22 +1,7 @@
-
 const NAMA_BULAN = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
-
-/**
- * Hitung bulan kapan tombol Generate boleh aktif.
- * bulanGenerate = bulan_pengangkatan - 3, dengan rollover ke tahun sebelumnya.
- */
-function getBulanGenerate(bulanPengangkatan: number): { bulan: number; rollbackTahun: boolean } {
-  let bulan = bulanPengangkatan - 3;
-  let rollbackTahun = false;
-  if (bulan <= 0) {
-    bulan += 12;
-    rollbackTahun = true;
-  }
-  return { bulan, rollbackTahun };
-}
 
 type ButtonState = 'disabled' | 'ready' | 'loading';
 
@@ -25,40 +10,43 @@ interface GeneratedButtonProps {
   isLoading?: boolean;
   /** bulan_pengangkatan dari data pegawai (1-12). Jika tidak ada, button selalu ready. */
   bulanPengangkatan?: number;
+  /** tahun kgb berikutnya */
+  tahunKgbBerikutnya?: number;
 }
 
-export default function GeneratedButton({ onClick, isLoading, bulanPengangkatan }: GeneratedButtonProps) {
+export default function GeneratedButton({ onClick, isLoading, bulanPengangkatan, tahunKgbBerikutnya }: GeneratedButtonProps) {
   let state: ButtonState = 'ready';
+  let labelDisabled = 'Belum siap';
 
   if (isLoading) {
     state = 'loading';
-  } else if (bulanPengangkatan !== undefined) {
-    const currentMonth = new Date().getMonth() + 1; // 1-12
+  } else if (bulanPengangkatan !== undefined && tahunKgbBerikutnya !== undefined) {
+    const now = new Date();
+    // Tanggal KGB adalah bulanPengangkatan (1-12) di tahunKgbBerikutnya
+    // Generate date = KGB date dikurangi 3 bulan
+    const generateDate = new Date(tahunKgbBerikutnya, bulanPengangkatan - 1 - 3, 1);
+    
+    // Set awal hari ini ke tanggal 1 agar bisa dibandingkan dengan generateDate
+    const currentMonthDate = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const { bulan: bulanGenerate, rollbackTahun } = getBulanGenerate(bulanPengangkatan);
-
-    // Jika rollbackTahun = true, bulan generate ada di akhir tahun lalu
-    // artinya tahun ini sudah melewati periode tersebut → selalu ready
-    const sudahSiap = rollbackTahun ? true : currentMonth >= bulanGenerate;
-
-    if (!sudahSiap) {
+    if (currentMonthDate < generateDate) {
       state = 'disabled';
+      labelDisabled = `${NAMA_BULAN[generateDate.getMonth()]} ${generateDate.getFullYear()}`;
     }
+  } else if (bulanPengangkatan !== undefined) {
+    // Fallback jika tidak ada tahun (misal dari mode lama)
+    state = 'disabled';
   }
-
-  const namaBuilanGenerate = bulanPengangkatan !== undefined
-    ? NAMA_BULAN[getBulanGenerate(bulanPengangkatan).bulan - 1]
-    : 'Belum siap';
 
   const config: Record<ButtonState, { label: string; className: string; showIcon: boolean }> = {
     disabled: {
-      label: namaBuilanGenerate,
+      label: labelDisabled,
       className: 'bg-gray-200 text-gray-400 cursor-not-allowed',
       showIcon: false,
     },
     ready: {
       label: 'Generate',
-      className: 'bg-amber-500 hover:bg-amber-600 text-white',
+      className: 'bg-[#635BFF] hover:bg-[#5249ea] text-white',
       showIcon: true,
     },
     loading: {

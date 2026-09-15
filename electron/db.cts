@@ -40,6 +40,7 @@ export function importEmployeesToDatabase(
       tahun_pengangkatan,
       bulan_pengangkatan,
       total_masa_kerja,
+      mkg_awal,
       pangkat_golongan,
       satuan_kerja,
       status_pegawai
@@ -51,6 +52,7 @@ export function importEmployeesToDatabase(
       @tahun_pengangkatan,
       @bulan_pengangkatan,
       @total_masa_kerja,
+      @mkg_awal,
       @pangkat_golongan,
       @satuan_kerja,
       @status_pegawai
@@ -62,6 +64,7 @@ export function importEmployeesToDatabase(
       tahun_pengangkatan = excluded.tahun_pengangkatan,
       bulan_pengangkatan = excluded.bulan_pengangkatan,
       total_masa_kerja   = excluded.total_masa_kerja,
+      mkg_awal           = excluded.mkg_awal,
       pangkat_golongan   = excluded.pangkat_golongan,
       satuan_kerja       = excluded.satuan_kerja,
       status_pegawai     = excluded.status_pegawai
@@ -85,6 +88,7 @@ export function importEmployeesToDatabase(
           tahun_pengangkatan: emp.tahun_pengangkatan,
           bulan_pengangkatan: emp.bulan_pengangkatan,
           total_masa_kerja:   emp.total_masa_kerja,
+          mkg_awal:           emp.mkg_awal ?? 0,
           pangkat_golongan:   emp.pangkat_golongan ?? null,
           satuan_kerja:       emp.satuan_kerja   ?? null,
           status_pegawai:     emp.status_pegawai ?? null,
@@ -131,7 +135,14 @@ export function importEmployeesToDatabase(
  * @returns Array PegawaiKGB yang siap ditampilkan di UI
  */
 export function getPegawaiKGB(db: Database): PegawaiKGB[] {
-  const stmt = db.prepare<[], PegawaiKGB>(`
+  const currentYear = new Date().getFullYear();
+
+  // MKG efektif = mkg_awal + total_masa_kerja
+  // - mkg_awal=0: pegawai reguler (II/a, III/a) mulai dari 0
+  // - mkg_awal=3: pegawai formasi langsung (II/b, II/c, II/d, dst) mulai dari 3
+  // Dengan rumus ini, RIRIS (mkg_awal=3, total=1) → effective_mkg=4 → next_valid=5 → KGB 1 tahun lagi
+  // Dan MARISKA (mkg_awal=0, total=2) → effective_mkg=2 → next_valid=3 → KGB 1 tahun lagi
+  const stmt = db.prepare<[number, number], PegawaiKGB>(`
     SELECT
       p.id,
       p.nip,
@@ -141,18 +152,80 @@ export function getPegawaiKGB(db: Database): PegawaiKGB[] {
       p.tahun_pengangkatan,
       p.bulan_pengangkatan,
       p.total_masa_kerja,
+      COALESCE(p.mkg_awal, 0) as mkg_awal,
+      COALESCE(p.mkg_awal, 0) + p.total_masa_kerja as mkg,
       p.pangkat_golongan,
       p.satuan_kerja,
       p.status_pegawai,
-      tg.gaji_pokok
+      CASE
+        WHEN tg_curr.gaji_pokok > 0 THEN tg_curr.gaji_pokok
+        WHEN tg_next.gaji_pokok > 0 THEN tg_next.gaji_pokok
+        WHEN tg_max.gaji_pokok > 0 THEN tg_max.gaji_pokok
+        ELSE NULL
+      END as gaji_pokok,
+      NULL as mkg_berikutnya,
+      CASE
+        WHEN tg_curr.gaji_pokok > 0 THEN ?
+        WHEN tg_next.gaji_pokok > 0 THEN ? + (tg_next.mkg - (COALESCE(p.mkg_awal, 0) + p.total_masa_kerja))
+        ELSE NULL -- Jika sudah mentok MKG maksimal, tidak ada KGB berikutnya
+      END as tahun_kgb_berikutnya
     FROM pegawai p
-    INNER JOIN tabel_gaji tg
-      ON  tg.golongan    = p.golongan COLLATE NOCASE
-      AND tg.subgolongan = p.subgolongan COLLATE NOCASE
-      AND tg.mkg         = p.total_masa_kerja
-    WHERE tg.gaji_pokok > 0
-    ORDER BY p.nama ASC
+    -- Cek gaji di MKG efektif saat ini (mkg_awal + total_masa_kerja)
+    LEFT JOIN tabel_gaji tg_curr
+      ON  tg_curr.golongan    = p.golongan    COLLATE NOCASE
+      AND tg_curr.subgolongan = p.subgolongan COLLATE NOCASE
+      AND tg_curr.mkg         = COALESCE(p.mkg_awal, 0) + p.total_masa_kerja
+      AND tg_curr.gaji_pokok  > 0
+    -- Cari MKG valid terdekat di atas effective_mkg
+    LEFT JOIN tabel_gaji tg_next
+      ON  tg_next.golongan    = p.golongan    COLLATE NOCASE
+      AND tg_next.subgolongan = p.subgolongan COLLATE NOCASE
+      AND tg_next.mkg         = (
+            SELECT MIN(mkg) FROM tabel_gaji
+            WHERE golongan    = p.golongan    COLLATE NOCASE
+              AND subgolongan = p.subgolongan COLLATE NOCASE
+              AND mkg         > COALESCE(p.mkg_awal, 0) + p.total_masa_kerja
+              AND gaji_pokok  > 0
+          )
+      AND tg_curr.id IS NULL
+    -- Cari MKG maksimum jika effective_mkg melebihi batas tabel
+    LEFT JOIN tabel_gaji tg_max
+      ON  tg_max.golongan    = p.golongan    COLLATE NOCASE
+      AND tg_max.subgolongan = p.subgolongan COLLATE NOCASE
+      AND tg_max.mkg         = (
+            SELECT MAX(mkg) FROM tabel_gaji
+            WHERE golongan    = p.golongan    COLLATE NOCASE
+              AND subgolongan = p.subgolongan COLLATE NOCASE
+              AND gaji_pokok  > 0
+          )
+      AND tg_curr.id IS NULL 
+      AND tg_next.id IS NULL
+    ORDER BY tahun_kgb_berikutnya ASC, p.bulan_pengangkatan ASC, p.nama ASC
   `);
 
-  return stmt.all();
+  return stmt.all(currentYear, currentYear);
+}
+
+/**
+ * Menghapus semua data dari tabel pegawai
+ * tanpa menghapus data gaji dari tabel referensi.
+ *
+ * @param db - Instance Database dari better-sqlite3
+ * @returns boolean sukses atau gagal
+ */
+export function resetPegawai(db: Database): boolean {
+  const transaction = db.transaction(() => {
+    // 1. Hapus semua data pegawai
+    db.prepare('DELETE FROM pegawai').run();
+    // 2. Reset ID auto-increment (agar kembali mulai dari 1)
+    db.prepare("DELETE FROM sqlite_sequence WHERE name='pegawai'").run();
+  });
+
+  try {
+    transaction();
+    return true;
+  } catch (error) {
+    console.error('[DB] Gagal mereset data pegawai:', error);
+    return false;
+  }
 }

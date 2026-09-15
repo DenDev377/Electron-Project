@@ -7,6 +7,8 @@ export interface PegawaiRow {
   nama: string;
   golongan: string;
   subgolongan: string;
+  nrp?: string;
+  mkg_awal?: number;
   pangkat_golongan?: string;
   satuan_kerja: string;
   status_pegawai: string;
@@ -24,6 +26,8 @@ export interface Employee {
   tahun_pengangkatan: number;
   bulan_pengangkatan: number;
   total_masa_kerja: number;
+  /** Kredit MKG awal saat pengangkatan (0 untuk reguler, 3 untuk formasi langsung II/c, dll) */
+  mkg_awal: number;
   pangkat_golongan?: string;
   satuan_kerja?: string;
   status_pegawai?: string;
@@ -63,8 +67,12 @@ export interface PegawaiKGB {
   tahun_pengangkatan: number;
   bulan_pengangkatan: number;
   total_masa_kerja: number;
+  mkg_awal: number;
+  mkg: number;
   pangkat_golongan: string | null;
   satuan_kerja: string | null;
   status_pegawai: string | null;
   gaji_pokok: number;
+  mkg_berikutnya: number | null;
+  tahun_kgb_berikutnya: number | null;
 }
