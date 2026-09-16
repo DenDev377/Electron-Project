@@ -47,6 +47,19 @@ try {
   // WAL mode: meningkatkan performa concurrent read/write
   db.pragma('journal_mode = WAL');
   console.log('[Main] Database connected successfully.');
+
+  // Migration: Add mkg_awal column if it doesn't exist
+  try {
+    const tableInfo = db.pragma('table_info(pegawai)') as any[];
+    const hasMkgAwal = tableInfo.some(col => col.name === 'mkg_awal');
+    if (!hasMkgAwal) {
+      console.log('[Main] Migration: Adding mkg_awal column to pegawai table...');
+      db.prepare('ALTER TABLE pegawai ADD COLUMN mkg_awal INTEGER DEFAULT 0').run();
+    }
+  } catch (migErr) {
+    console.error('[Main] Migration error:', migErr);
+  }
+
 } catch (err) {
   console.error('[Main] FATAL: Gagal membuka database:', err);
   app.quit();
@@ -221,8 +234,8 @@ function formatTanggalSurat(tahunKgb: number, bulanKgb: number): string {
  * Channel: 'doc:generateKGB'
  * Generate file Word menggunakan Docxtemplater
  */
-ipcMain.handle('doc:generateKGB', async (_, id: number) => {
-  console.log(`[Main] generateDokumenKGB dipanggil untuk id: ${id}`);
+ipcMain.handle('doc:generateKGB', async (_, id: number, tanggalSuratOverride?: string) => {
+  console.log(`[Main] generateDokumenKGB dipanggil untuk id: ${id} dengan tanggal: ${tanggalSuratOverride}`);
   try {
     // 1. Ambil data pegawai berdasarkan id
     const stmt = db.prepare('SELECT nama, nip, satuan_kerja, tahun_pengangkatan, bulan_pengangkatan, golongan, subgolongan, pangkat_golongan, total_masa_kerja, mkg_awal FROM pegawai WHERE id = ?');
@@ -348,8 +361,25 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       textTahunKgbBerikutnya = '-';
     }
 
-    // Hitung tanggal surat: bulan berlaku KGB (bulan_pengangkatan) dikurangi 3 bulan, hari kerja terdekat
-    const tanggalSurat = formatTanggalSurat(currentYear, bulan_pengangkatan);
+    // Hitung tanggal surat
+    let tanggalSurat = formatTanggalSurat(currentYear, bulan_pengangkatan);
+    let bulanTahunSurat = '';
+
+    if (tanggalSuratOverride) {
+      const d = new Date(tanggalSuratOverride);
+      if (!isNaN(d.getTime())) {
+        const tglStr = d.getDate().toString().padStart(2, '0');
+        const blnIndex = d.getMonth();
+        const thnStr = d.getFullYear();
+        tanggalSurat = `Baturaja, ${tglStr} ${NAMA_BULAN[blnIndex]} ${thnStr}`;
+        bulanTahunSurat = `${(blnIndex + 1).toString().padStart(2, '0')}/${thnStr}`;
+      }
+    } else {
+      let blnSurat = bulan_pengangkatan - 3;
+      let thnSurat = currentYear;
+      if (blnSurat <= 0) { blnSurat += 12; thnSurat -= 1; }
+      bulanTahunSurat = `${blnSurat.toString().padStart(2, '0')}/${thnSurat}`;
+    }
 
     // 2. Baca template Word
     const templateDir = isDev ? path.resolve(process.cwd(), 'templates') : path.join(process.resourcesPath, 'templates');
@@ -387,7 +417,8 @@ ipcMain.handle('doc:generateKGB', async (_, id: number) => {
       gaji_baru,
       mkg_berikutnya: textMkgBerikutnya,
       tahun_kgb_berikutnya: textTahunKgbBerikutnya,
-      tanggal_surat: tanggalSurat
+      tanggal_surat: tanggalSurat,
+      bln_thn: bulanTahunSurat
     });
     const buf = doc.getZip().generate({
       type: 'nodebuffer',

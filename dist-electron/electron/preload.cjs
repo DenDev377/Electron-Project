@@ -26,7 +26,7 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Memicu pembuatan dokumen KGB untuk satu pegawai.
      */
-    generateDokumenKGB: (id) => electron_1.ipcRenderer.invoke('doc:generateKGB', id),
+    generateDokumenKGB: (id, tanggalSurat) => electron_1.ipcRenderer.invoke('doc:generateKGB', id, tanggalSurat),
     /**
      * Mereset seluruh data pegawai
      */

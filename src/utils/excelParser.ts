@@ -166,8 +166,11 @@ export async function parseExcelFile(file: File): Promise<PegawaiRow[]> {
             entry.subgolongan = parsed.subgolongan;
           }
 
+        } else if (field === 'mkg_awal') {
+          const parsedMkg = parseInt(strValue, 10);
+          entry.mkg_awal = isNaN(parsedMkg) ? undefined : parsedMkg;
         } else {
-          entry[field] = strValue;
+          (entry as any)[field] = strValue;
         }
       });
 

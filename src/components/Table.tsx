@@ -22,35 +22,43 @@ export default function Table({ data }: TableProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragMode, setDragMode] = useState<'select' | 'deselect'>('select');
 
+  // Modal State
+  const [isDateModalOpen, setIsDateModalOpen] = useState(false);
+  const [dateInput, setDateInput] = useState(() => new Date().toISOString().split('T')[0]);
+  const [pendingAction, setPendingAction] = useState<((tanggal: string) => void) | null>(null);
+
   useEffect(() => {
     const handleMouseUp = () => setIsDragging(false);
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, []);
 
-  const handleGenerate = async (item: PegawaiKGB | PegawaiRow) => {
+  const handleGenerate = (item: PegawaiKGB | PegawaiRow) => {
     if (!('id' in item) || item.id === undefined) {
       alert("Pegawai belum ada di database, silakan import terlebih dahulu.");
       return;
     }
     
-    if (window.electronAPI) {
-      setProcessingId(item.id);
-      try {
-        const result = await window.electronAPI.generateDokumenKGB(item.id);
-        if (result.success) {
-          alert(`Dokumen berhasil dibuat!\n\nTersimpan otomatis di:\n${result.filePath}`);
-        } else {
-          alert(`Gagal: ${result.error}`);
+    setPendingAction(() => async (tanggalSurat: string) => {
+      if (window.electronAPI) {
+        setProcessingId(item.id);
+        try {
+          const result = await window.electronAPI.generateDokumenKGB(item.id, tanggalSurat);
+          if (result.success) {
+            alert(`Dokumen berhasil dibuat!\n\nTersimpan otomatis di:\n${result.filePath}`);
+          } else {
+            alert(`Gagal: ${result.error}`);
+          }
+        } catch (err) {
+          alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+          setProcessingId(null);
         }
-      } catch (err) {
-        alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setProcessingId(null);
+      } else {
+        alert("Fitur generate hanya bisa digunakan dalam aplikasi desktop.");
       }
-    } else {
-      alert("Fitur generate hanya bisa digunakan dalam aplikasi desktop.");
-    }
+    });
+    setIsDateModalOpen(true);
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,36 +110,39 @@ export default function Table({ data }: TableProps) {
     });
   };
 
-  const handleGenerateSelected = async () => {
+  const handleGenerateSelected = () => {
     if (!window.electronAPI) {
       alert("Fitur generate hanya bisa digunakan dalam aplikasi desktop.");
       return;
     }
     
-    setIsGeneratingBatch(true);
-    let successCount = 0;
-    let failCount = 0;
-    
-    try {
-      for (const id of Array.from(selectedIds)) {
-        setProcessingId(id);
-        const result = await window.electronAPI.generateDokumenKGB(id);
-        if (result.success) {
-          successCount++;
-        } else {
-          failCount++;
-          console.error(`Gagal generate ID ${id}: ${result.error}`);
-        }
-      }
+    setPendingAction(() => async (tanggalSurat: string) => {
+      setIsGeneratingBatch(true);
+      let successCount = 0;
+      let failCount = 0;
       
-      alert(`Selesai! Berhasil membuat ${successCount} dokumen.${failCount > 0 ? `\nGagal membuat ${failCount} dokumen.` : ''}`);
-      setSelectedIds(new Set());
-    } catch (err) {
-      alert(`Terjadi error saat generate massal: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsGeneratingBatch(false);
-      setProcessingId(null);
-    }
+      try {
+        for (const id of Array.from(selectedIds)) {
+          setProcessingId(id);
+          const result = await window.electronAPI!.generateDokumenKGB(id, tanggalSurat);
+          if (result.success) {
+            successCount++;
+          } else {
+            failCount++;
+            console.error(`Gagal generate ID ${id}: ${result.error}`);
+          }
+        }
+        
+        alert(`Selesai! Berhasil membuat ${successCount} dokumen.${failCount > 0 ? `\nGagal membuat ${failCount} dokumen.` : ''}`);
+        setSelectedIds(new Set());
+      } catch (err) {
+        alert(`Terjadi error saat generate massal: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setIsGeneratingBatch(false);
+        setProcessingId(null);
+      }
+    });
+    setIsDateModalOpen(true);
   };
 
   const sortedData = useMemo(() => {
@@ -386,8 +397,52 @@ export default function Table({ data }: TableProps) {
             )})
           )}
         </tbody>
-      </table>
+        </table>
       </div>
+      
+      {isDateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 animate-in zoom-in-95">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Tanggal Surat</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Pilih tanggal yang akan dicetak pada dokumen dan nomor surat.
+            </p>
+            
+            <div className="mb-6">
+              <label htmlFor="tanggalSurat" className="block text-sm font-medium text-gray-700 mb-1">
+                Tanggal
+              </label>
+              <input
+                type="date"
+                id="tanggalSurat"
+                value={dateInput}
+                onChange={(e) => setDateInput(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#635BFF] focus:border-transparent transition-shadow"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsDateModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#635BFF] focus:ring-offset-1 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  setIsDateModalOpen(false);
+                  if (pendingAction) {
+                    pendingAction(dateInput);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#635BFF] rounded-lg hover:bg-[#5249ea] focus:outline-none focus:ring-2 focus:ring-[#635BFF] focus:ring-offset-1 transition-colors"
+              >
+                Lanjutkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

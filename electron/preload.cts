@@ -30,8 +30,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /**
    * Memicu pembuatan dokumen KGB untuk satu pegawai.
    */
-  generateDokumenKGB: (id: number) =>
-    ipcRenderer.invoke('doc:generateKGB', id),
+  generateDokumenKGB: (id: number, tanggalSurat?: string) =>
+    ipcRenderer.invoke('doc:generateKGB', id, tanggalSurat),
 
   /**
    * Mereset seluruh data pegawai

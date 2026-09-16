@@ -7,7 +7,7 @@ import type { Employee, ImportResult, PegawaiKGB } from './pegawai';
 export interface ElectronAPI {
   importPegawai:  (data: Employee[]) => Promise<ImportResult>;
   getPegawaiKGB:  () => Promise<PegawaiKGB[]>;
-  generateDokumenKGB: (id: number) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+  generateDokumenKGB: (id: number, tanggalSurat?: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
   resetPegawai: () => Promise<boolean>;
   selectOutputFolder: () => Promise<string | null>;
   getOutputFolder: () => Promise<string>;

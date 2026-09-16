@@ -24,9 +24,8 @@ function parseGolonganMentah(raw: string): { gol: string; sub: string } | null {
 /**
  * Menghitung kredit/penyesuaian MKG berdasarkan golongan awal & sekarang.
  */
-function hitungMkgAwalOtomatis(golSekarang: string, subSekarang: string, rawGolAwal?: string): number {
+function hitungMkgAwalOtomatis(golSekarang: string, _subSekarang: string, rawGolAwal?: string): number {
   const currGol = golSekarang.toUpperCase();
-  const currSub = subSekarang.toLowerCase();
   
   if (!rawGolAwal) return 0;
 
